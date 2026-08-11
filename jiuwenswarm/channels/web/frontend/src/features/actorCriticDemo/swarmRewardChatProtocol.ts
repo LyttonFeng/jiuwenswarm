@@ -68,9 +68,19 @@ export function finalSummary(run: RewardRun): string {
     ].join('\n');
   }
   if (run.operation === 'build_rewardpack') {
-    return run.rewardpack.verified
-      ? `任务 **${run.task.task_id}** 的 RewardPack 已构建、通过沙箱认证并冻结：**${run.rewardpack.passed}/${run.rewardpack.probe_count} probes**。你可以查看内容，或让我用它启动 Actor-Critic。`
-      : `RewardPack 构建已结束，但没有通过认证。状态：**${run.status}**。`;
+    if (run.rewardpack.verified) {
+      return `任务 **${run.task.task_id}** 的 RewardPack 已构建、通过沙箱认证并冻结：**${run.rewardpack.passed}/${run.rewardpack.probe_count} probes**。你可以查看内容，或让我用它启动 Actor-Critic。`;
+    }
+    const lastRound = [...run.timeline]
+      .reverse()
+      .find((event) => event.kind === 'builder_round');
+    return [
+      `任务 **${run.task.task_id}** 的 RewardPack 没有通过沙箱认证。`,
+      '',
+      lastRound?.detail || run.message,
+      '',
+      '本次没有冻结新 RewardPack，也没有启动 Actor-Critic。可以根据上面的认证反例继续修订 Builder。',
+    ].join('\n');
   }
   if (run.status === 'failed' && !run.actor.started) {
     return [
