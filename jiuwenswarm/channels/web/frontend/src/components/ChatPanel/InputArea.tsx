@@ -13,7 +13,7 @@
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { AtSign, CircleX, ClipboardList, FileText, Loader2, Plus, Square, Target, X } from 'lucide-react';
+import { AtSign, CircleX, ClipboardList, FileText, Loader2, Plus, ShieldCheck, Square, Target, X } from 'lucide-react';
 import { FileTypeIcon, getFileTypeIconKeyFromFilename, type FileTypeIconKey } from './FileTypeIcon';
 import { useSpeechRecognition } from '../../hooks';
 
@@ -137,6 +137,8 @@ interface InputAreaProps {
   onInterrupt: (newInput?: string) => void;
   onCancel: () => void;
   onSwitchMode: (mode: AgentMode) => void;
+  /** 固定的外部运行模式；提供后复用 mode pill，但不允许切到普通 Agent/Team。 */
+  fixedModeLabel?: string;
   isProcessing: boolean;
   autoFocusKey?: string | null;
   /** 跳转到技能管理页 */
@@ -492,6 +494,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
     onInterrupt,
     onCancel,
     onSwitchMode,
+    fixedModeLabel,
     isProcessing,
     autoFocusKey = null,
     onNavigateToSkills,
@@ -2317,6 +2320,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
               type="button"
               className="chat-mode-select__trigger"
               onClick={() => {
+                if (fixedModeLabel) return;
                 if (hasHistory || isProcessing) return;
                 if (!isModeMenuOpen && modeMenuRef.current) {
                   const rect = modeMenuRef.current.getBoundingClientRect();
@@ -2327,25 +2331,28 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                 }
                 setIsModeMenuOpen((open) => !open);
               }}
-              aria-haspopup="menu"
-              aria-expanded={isModeMenuOpen}
-              data-testid={`chat-mode-${currentMode.value}`}
-              style={(hasHistory || isProcessing) ? { cursor: 'default' } : undefined}
+              aria-haspopup={fixedModeLabel ? undefined : 'menu'}
+              aria-expanded={fixedModeLabel ? undefined : isModeMenuOpen}
+              aria-disabled={Boolean(fixedModeLabel)}
+              data-testid={fixedModeLabel ? 'chat-mode-fixed' : `chat-mode-${currentMode.value}`}
+              style={(fixedModeLabel || hasHistory || isProcessing) ? { cursor: 'default' } : undefined}
             >
               <span className="chat-mode-select__value">
                 <span className="chat-mode-select__icon" aria-hidden="true">
-                  <currentMode.icon className="w-4 h-4" />
+                  {fixedModeLabel
+                    ? <ShieldCheck className="w-4 h-4" />
+                    : <currentMode.icon className="w-4 h-4" />}
                 </span>
-                <span className="chat-mode-select__label">{t(currentMode.i18nKey)}</span>
+                <span className="chat-mode-select__label">{fixedModeLabel || t(currentMode.i18nKey)}</span>
               </span>
-              {!hasHistory && !isProcessing && (
+              {!fixedModeLabel && !hasHistory && !isProcessing && (
                 <svg className="chat-mode-select__chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 8l4 4 4-4" />
                 </svg>
               )}
             </button>
 
-            {isModeMenuOpen && modeMenuAnchor && createPortal(
+            {!fixedModeLabel && isModeMenuOpen && modeMenuAnchor && createPortal(
               <div
                 ref={modeMenuPortalRef}
                 className="chat-mode-select__menu"
@@ -2386,7 +2393,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
               </div>,
               document.body
             )}
-            {isModeMenuOpen && hoveredOptionDesc && modeMenuAnchor && createPortal(
+            {!fixedModeLabel && isModeMenuOpen && hoveredOptionDesc && modeMenuAnchor && createPortal(
               <div
                 className="chat-mode-option-tooltip"
                 style={menuDirection === 'up'

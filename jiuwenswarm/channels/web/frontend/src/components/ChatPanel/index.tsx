@@ -79,6 +79,8 @@ interface ChatPanelProps {
   onInterrupt: (newInput?: string) => void;
   onCancel: () => void;
   onSwitchMode: (mode: AgentMode) => void;
+  /** 用于外部编排器提供固定的运行模式标识；提供后隐藏普通 Agent/Team 切换菜单。 */
+  fixedModeLabel?: string;
   isProcessing: boolean;
   onUserAnswer: (requestId: string, answers: UserAnswer[], source?: string) => void;
   onExportShare?: () => void | Promise<void>;
@@ -722,6 +724,7 @@ export function ChatPanel({
   onInterrupt,
   onCancel,
   onSwitchMode,
+  fixedModeLabel,
   isProcessing,
   onUserAnswer,
   onExportShare,
@@ -1353,6 +1356,7 @@ export function ChatPanel({
                   onInterrupt={onInterrupt}
                   onCancel={onCancel}
                   onSwitchMode={onSwitchMode}
+                  fixedModeLabel={fixedModeLabel}
                   isProcessing={isProcessing}
                   autoFocusKey={autoFocusKey}
                   onNavigateToSkills={onNavigateToSkills}
@@ -1395,6 +1399,7 @@ export function ChatPanel({
             onInterrupt={onInterrupt}
             onCancel={onCancel}
             onSwitchMode={onSwitchMode}
+            fixedModeLabel={fixedModeLabel}
             isProcessing={isProcessing}
             autoFocusKey={autoFocusKey}
             onNavigateToSkills={onNavigateToSkills}

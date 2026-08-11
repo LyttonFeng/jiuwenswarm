@@ -2359,6 +2359,7 @@ function AppContent() {
                       onInterrupt={handleInterrupt}
                       onCancel={handleCancel}
                       onSwitchMode={handleSwitchMode}
+                      fixedModeLabel={isSwarmRewardMode ? 'Swarm Reward 模式' : undefined}
                       isProcessing={isProcessing}
                       onUserAnswer={handleUserAnswer}
                       onExportShare={handleExportShare}
