@@ -50,7 +50,7 @@ export interface RewardPackStatus {
 export interface RewardTimelineEvent {
   id: string;
   stage: 'rewardpack' | 'actor' | 'grader';
-  kind: 'builder_round' | 'rewardpack_certified' | 'actor_critic_turn' | 'actor_action' | 'critic_intervention' | 'actor_final' | 'grader_result';
+  kind: 'builder_round' | 'rewardpack_certified' | 'actor_critic_turn' | 'actor_hint_action' | 'actor_action' | 'critic_intervention' | 'actor_final' | 'grader_result';
   title: string;
   detail: string;
   status: 'running' | 'completed' | 'revised';
