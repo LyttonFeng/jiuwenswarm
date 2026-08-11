@@ -8,9 +8,12 @@ export function useChatRoute() {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
-  const navigate = useCallback((next: ChatRoute, options?: { replace?: boolean }) => {
+  const navigate = useCallback((next: ChatRoute, options?: { replace?: boolean; search?: string }) => {
     const method = options?.replace ? 'replaceState' : 'pushState';
-    window.history[method](null, '', chatRoutePath(next));
+    const search = options?.search
+      ? options.search.startsWith('?') ? options.search : `?${options.search}`
+      : '';
+    window.history[method](null, '', `${chatRoutePath(next)}${search}`);
     setRoute(next);
   }, []);
   return { route, navigate };

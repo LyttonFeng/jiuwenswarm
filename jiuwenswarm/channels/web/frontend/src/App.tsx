@@ -283,6 +283,7 @@ function AppContent() {
   const { route, navigate } = useChatRoute();
   const tRef = useRef(t);
   const isSwarmRewardMode = new URLSearchParams(window.location.search).get('mode') === 'swarm-reward';
+  const swarmRewardRouteSearch = isSwarmRewardMode ? '?mode=swarm-reward' : undefined;
   const swarmRewardInitialRunId = isSwarmRewardMode
     ? new URLSearchParams(window.location.search).get('run')
     : null;
@@ -433,7 +434,9 @@ function AppContent() {
       setSessionId(route.sessionId);
       setActiveNav('chat');
     } else if (route.kind === 'chat-new') {
-      if (window.location.pathname !== '/chat/new') navigate({ kind: 'chat-new' }, { replace: true });
+      if (window.location.pathname !== '/chat/new') {
+        navigate({ kind: 'chat-new' }, { replace: true, search: swarmRewardRouteSearch });
+      }
       if (preserveSelectedProjectOnChatNewRef.current) {
         preserveSelectedProjectOnChatNewRef.current = false;
       } else {
@@ -444,7 +447,7 @@ function AppContent() {
       setActiveNav('chat');
       setTeamAreaExpanded(false);
     }
-  }, [navigate, route, setTeamAreaExpanded]);
+  }, [navigate, route, setTeamAreaExpanded, swarmRewardRouteSearch]);
 
   useEffect(() => {
     ensureSessionRuntimes(sessionId);
@@ -1667,10 +1670,10 @@ function AppContent() {
     setSessionId(NEW_CONVERSATION_ID);
     setCurrentSession(null);
     setTeamAreaExpanded(false);
-    navigate({ kind: 'chat-new' });
+    navigate({ kind: 'chat-new' }, { search: swarmRewardRouteSearch });
     setActiveNav('chat');
     requestComposerFocus();
-  }, [disposeInFlightHistoryHandles, mode, navigate, requestComposerFocus, setCurrentSession, setSelectedProject, setTeamAreaExpanded]);
+  }, [disposeInFlightHistoryHandles, mode, navigate, requestComposerFocus, setCurrentSession, setSelectedProject, setTeamAreaExpanded, swarmRewardRouteSearch]);
 
   const handleNewSession = useCallback(async (options?: NewConversationOptions) => {
     enterNewConversation(mode, options);
@@ -1768,7 +1771,10 @@ function AppContent() {
         useChatStore.getState().setProcessing(NEW_CONVERSATION_ID, false);
         sessionIdRef.current = newSid;
         setSessionId(newSid);
-        navigate({ kind: 'chat-session', sessionId: newSid }, { replace: true });
+        navigate(
+          { kind: 'chat-session', sessionId: newSid },
+          { replace: true, search: swarmRewardRouteSearch },
+        );
         const goalArmedOnNew = useGoalStore.getState().runtimes[NEW_CONVERSATION_ID]?.armed ?? false;
         useGoalStore.getState().setArmed(NEW_CONVERSATION_ID, false);
         if (goalArmedOnNew) {
@@ -1807,7 +1813,7 @@ function AppContent() {
     } else {
       useChatStore.getState().setInputValue(currentSessionId, content);
     }
-  }, [disposeInFlightHistoryHandles, isSwarmRewardMode, mode, navigate, request, sendMessage, setGoalObjective, swarmRewardChat, t]);
+  }, [disposeInFlightHistoryHandles, isSwarmRewardMode, mode, navigate, request, sendMessage, setGoalObjective, swarmRewardChat, swarmRewardRouteSearch, t]);
 
   const handlePersistMedia = useCallback((content: string, mediaItems: MediaItem[]) => {
     const currentSessionId = sessionIdRef.current;
@@ -2024,7 +2030,10 @@ function AppContent() {
         setMode(targetSessionId, resolvedMode as AgentMode);
       }
       setActiveNav('chat');
-      navigate({ kind: 'chat-session', sessionId: targetSessionId });
+      navigate(
+        { kind: 'chat-session', sessionId: targetSessionId },
+        { search: swarmRewardRouteSearch },
+      );
       if (!options?.skipHistoryLoad) {
         setHistoryBootstrapKey((k) => k + 1);
       }
@@ -2052,6 +2061,7 @@ function AppContent() {
       setProcessing,
       setSessionId,
       setThinking,
+      swarmRewardRouteSearch,
       t,
       upsertSessionMetadata,
     ]
