@@ -5,6 +5,7 @@ import {
   cancelRewardRun,
   loadLatestRewardPack,
   loadRecentRuns,
+  loadRewardEnvironment,
   loadRewardRun,
   loadRewardTasks,
   routeRewardMessage,
@@ -17,6 +18,7 @@ import {
   STAGE_LABELS,
   TOOL_NAMES,
   answerForIntent,
+  environmentStatus,
   finalSummary,
   isTerminal,
   progressStatus,
@@ -332,6 +334,10 @@ export function useSwarmRewardChat(
       if (route.scope === 'general') return false;
 
       handled = true;
+      if (route.intent === 'environment_status') {
+        addMessage('assistant', environmentStatus(await loadRewardEnvironment()));
+        return true;
+      }
       const routedTask = availableTasks.find((item) => item.task_id === route.task_id) || null;
       if (routedTask) setSelectedTask(routedTask);
       const task = routedTask || run?.task || selectedTask;

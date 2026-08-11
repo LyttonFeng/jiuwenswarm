@@ -18,6 +18,19 @@ export interface RewardRuntimeInfo {
   execution: string;
 }
 
+export interface RewardExecutionEnvironment {
+  schema_version: 'swarm_reward.execution_environment.v1';
+  available: boolean;
+  provider: string;
+  docker: { available: boolean; server_version: string };
+  gpu: {
+    available: boolean;
+    devices: Array<{ name: string; memory_mib: number }>;
+  };
+  swebench: { cached_instance_images: number };
+  workspace: { available: boolean; free_gib: number | null };
+}
+
 export interface RewardPackStatus {
   available: boolean;
   verified: boolean;
@@ -121,6 +134,7 @@ export type RewardChatIntent =
   | 'replay_run'
   | 'rewardpack_status'
   | 'rewardpack_content'
+  | 'environment_status'
   | 'sandbox_status'
   | 'progress'
   | 'patch'

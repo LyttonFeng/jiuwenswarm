@@ -1,4 +1,4 @@
-import type { RewardChatIntent, RewardRun } from './types';
+import type { RewardChatIntent, RewardExecutionEnvironment, RewardRun } from './types';
 
 export type Stage = 'workspace' | 'rewardpack' | 'actor' | 'grader';
 
@@ -119,6 +119,33 @@ export function sandboxStatus(run: RewardRun): string {
     `- 验证证据：${verification}`,
     '',
     '这次只是查询状态，没有启动新的 Builder 或 Actor-Critic 运行。',
+  ].join('\n');
+}
+
+export function environmentStatus(environment: RewardExecutionEnvironment): string {
+  const docker = environment.docker.available
+    ? `可用（Server ${environment.docker.server_version}）`
+    : '不可用';
+  const gpu = environment.gpu.devices.length
+    ? environment.gpu.devices
+      .map((device) => `${device.name} · ${(device.memory_mib / 1024).toFixed(0)} GiB`)
+      .join('；')
+    : '未检测到';
+  const disk = environment.workspace.free_gib === null
+    ? '未知'
+    : `${environment.workspace.free_gib.toFixed(1)} GiB 可用`;
+  const verdict = environment.available
+    ? '当前远端 coding 执行环境可用。'
+    : '当前远端 coding 执行环境未完全就绪。';
+  return [
+    `**${verdict}**`,
+    '',
+    `- Docker：${docker}`,
+    `- GPU：${gpu}`,
+    `- 已缓存 SWE 实例镜像：${environment.swebench.cached_instance_images}`,
+    `- 实验工作区：${environment.workspace.available ? '可写' : '不可用'}，${disk}`,
+    '',
+    '以上是执行服务所在资源提供者的实时只读探测，不是 Mac 本机状态；本次查询没有启动 Builder 或 Actor-Critic。',
   ].join('\n');
 }
 

@@ -1,6 +1,7 @@
 import type {
   PackMode,
   RewardChatRoute,
+  RewardExecutionEnvironment,
   RewardRun,
   RewardRuntimeInfo,
   RewardTaskPreset,
@@ -9,7 +10,7 @@ import type {
 const API_BASE = (
   import.meta.env.VITE_SWARM_REWARD_API_BASE || 'http://127.0.0.1:8765'
 ).replace(/\/$/, '');
-const EXPECTED_PROTOCOL_VERSION = 'swarm_reward.web_chat.v3';
+const EXPECTED_PROTOCOL_VERSION = 'swarm_reward.web_chat.v4';
 
 function assertProtocol(version: string): void {
   if (version !== EXPECTED_PROTOCOL_VERSION) {
@@ -54,6 +55,10 @@ export async function loadRewardTasks(): Promise<{
 export async function loadRecentRuns(): Promise<RewardRun[]> {
   const response = await request<{ runs: RewardRun[] }>('/api/runs');
   return response.runs;
+}
+
+export async function loadRewardEnvironment(): Promise<RewardExecutionEnvironment> {
+  return request('/api/environment');
 }
 
 export async function startRewardRun(taskId: string, packMode: PackMode): Promise<RewardRun> {
