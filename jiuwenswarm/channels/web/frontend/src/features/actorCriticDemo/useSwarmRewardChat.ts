@@ -156,7 +156,9 @@ export function useSwarmRewardChat(
         summary: event.title,
       });
       if (event.kind === 'rewardpack_certified' && !previousStatus) {
-        addMessage('assistant', rewardPackContent(next));
+        addMessage('assistant', next.rewardpack_source_run_id
+          ? `已按内容哈希校验并载入 **${next.rewardpack.passed}/${next.rewardpack.probe_count} probes** 的冻结 RewardPack。现在开始 online Actor-Critic；Actor 与 Critic 不会看到 Gold patch。`
+          : rewardPackContent(next));
       }
     }
     progress.publishedEvents.set(event.id, event.status);

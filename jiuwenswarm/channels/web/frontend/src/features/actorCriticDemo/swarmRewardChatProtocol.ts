@@ -43,6 +43,24 @@ export function finalSummary(run: RewardRun): string {
       ? `任务 **${run.task.task_id}** 的 RewardPack 已构建、通过沙箱认证并冻结：**${run.rewardpack.passed}/${run.rewardpack.probe_count} probes**。你可以查看内容，或让我用它启动 Actor-Critic。`
       : `RewardPack 构建已结束，但没有通过认证。状态：**${run.status}**。`;
   }
+  if (run.status === 'failed' && !run.actor.started) {
+    return [
+      `任务 **${run.task.task_id}** 的 online Actor-Critic **没有启动成功**。`,
+      '',
+      'Actor 尚未产生任何动作，Critic 也没有审阅；这是运行环境或启动编排失败，**不是 issue 未解决的实验结论**。',
+      '',
+      `服务状态：${run.message}`,
+    ].join('\n');
+  }
+  if (run.status === 'failed' && !run.grader.complete) {
+    return [
+      `任务 **${run.task.task_id}** 的运行在官方评分前中断。`,
+      '',
+      `Actor 已执行 ${run.actor.tool_calls} 次工具调用，Critic 已审阅 ${run.actor.turns_reviewed} 次；由于没有官方 grader 结果，本次不能判定 resolved 或 unresolved。`,
+      '',
+      `服务状态：${run.message}`,
+    ].join('\n');
+  }
   const verdict = run.grader.complete
     ? `**${run.grader.resolved}/1 resolved**`
     : `运行状态：**${run.status}**`;
