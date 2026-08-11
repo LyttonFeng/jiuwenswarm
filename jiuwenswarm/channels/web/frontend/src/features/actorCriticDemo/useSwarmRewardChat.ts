@@ -450,7 +450,12 @@ export function useSwarmRewardChat(
       const frozen = task
         ? availableRuns.find((item) => item.task.task_id === task.task_id && item.status === 'completed')
         : null;
-      const referenceRun = run || (frozen ? await loadRewardRun(frozen.run_id) : null);
+      let referenceRun = run;
+      if (referenceRun) {
+        referenceRun = await loadRewardRun(referenceRun.run_id);
+      } else if (frozen) {
+        referenceRun = await loadRewardRun(frozen.run_id);
+      }
       if (referenceRun && route.intent) {
         setRun(referenceRun);
         setSelectedTask(referenceRun.task);
