@@ -451,7 +451,10 @@ export function ChatTimelineList({
   };
 
   const toggleStreak = (streakId: string) => {
-    setExpandedStreaks((prev) => ({ ...prev, [streakId]: !prev[streakId] }));
+    setExpandedStreaks((prev) => ({
+      ...prev,
+      [streakId]: !(prev[streakId] ?? defaultCompletedWorkExpanded),
+    }));
   };
 
   return (
@@ -527,7 +530,7 @@ export function ChatTimelineList({
           const turnFoldable = Boolean(meta?.completed && meta.hasWork);
           const turnOpen = !turnFoldable || (expandedTurns[item.turnId] ?? defaultCompletedWorkExpanded);
           const streak = liveStreakByItemKey.get(item.key);
-          const streakOpen = !streak || Boolean(expandedStreaks[streak.id]);
+          const streakOpen = !streak || (expandedStreaks[streak.id] ?? defaultCompletedWorkExpanded);
           const contentOpen = turnOpen && streakOpen;
           const isFoldAnchor = turnFoldAnchorKeys.get(item.turnId) === item.key;
           const isTurnAnchor =
