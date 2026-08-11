@@ -234,6 +234,7 @@ export function useSwarmRewardChat(
     if (!enabled || !trimmed) return false;
     let handled = false;
     let keepProcessing = Boolean(run && !isTerminal(run));
+    addMessage('user', trimmed, mediaItems);
     useChatStore.getState().setProcessing(sessionId, true);
     useChatStore.getState().setThinking(sessionId, true);
 
@@ -257,7 +258,6 @@ export function useSwarmRewardChat(
       if (route.scope === 'general') return false;
 
       handled = true;
-      addMessage('user', trimmed, mediaItems);
       const routedTask = availableTasks.find((item) => item.task_id === route.task_id) || null;
       if (routedTask) setSelectedTask(routedTask);
       const task = routedTask || run?.task || selectedTask;
