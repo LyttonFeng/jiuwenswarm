@@ -25,7 +25,7 @@ export interface RewardExecutionEnvironment {
   docker: { available: boolean; server_version: string };
   gpu: {
     available: boolean;
-    devices: Array<{ name: string; memory_mib: number }>;
+    devices: Array<{ name: string; memory_mib: number | null }>;
   };
   swebench: { cached_instance_images: number };
   workspace: { available: boolean; free_gib: number | null };

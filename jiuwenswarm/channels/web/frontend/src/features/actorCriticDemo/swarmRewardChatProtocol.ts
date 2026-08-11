@@ -126,9 +126,18 @@ export function environmentStatus(environment: RewardExecutionEnvironment): stri
   const docker = environment.docker.available
     ? `可用（Server ${environment.docker.server_version}）`
     : '不可用';
-  const gpu = environment.gpu.devices.length
-    ? environment.gpu.devices
-      .map((device) => `${device.name} · ${(device.memory_mib / 1024).toFixed(0)} GiB`)
+  const gpuGroups = environment.gpu.devices.reduce<Record<string, { count: number; memory: number | null }>>(
+    (groups, device) => {
+      const group = groups[device.name] || { count: 0, memory: device.memory_mib };
+      group.count += 1;
+      groups[device.name] = group;
+      return groups;
+    },
+    {},
+  );
+  const gpu = Object.entries(gpuGroups).length
+    ? Object.entries(gpuGroups)
+      .map(([name, group]) => `${group.count} × ${name}${group.memory === null ? '' : ` · ${(group.memory / 1024).toFixed(0)} GiB/卡`}`)
       .join('；')
     : '未检测到';
   const disk = environment.workspace.free_gib === null
