@@ -38,6 +38,11 @@ export function stageResult(run: RewardRun, stage: Stage): string {
 }
 
 export function finalSummary(run: RewardRun): string {
+  if (run.operation === 'build_rewardpack') {
+    return run.rewardpack.verified
+      ? `任务 **${run.task.task_id}** 的 RewardPack 已构建、通过沙箱认证并冻结：**${run.rewardpack.passed}/${run.rewardpack.probe_count} probes**。你可以查看内容，或让我用它启动 Actor-Critic。`
+      : `RewardPack 构建已结束，但没有通过认证。状态：**${run.status}**。`;
+  }
   const verdict = run.grader.complete
     ? `**${run.grader.resolved}/1 resolved**`
     : `运行状态：**${run.status}**`;
@@ -72,6 +77,42 @@ export function rewardPackStatus(run: RewardRun): string {
   return `RewardPack 尚未通过认证。当前运行状态为 **${run.status}**：${run.message}`;
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  terminal: 'Goal',
+  constraint: 'Preservation',
+  shaping: 'Solution',
+};
+
+export function rewardPackContent(run: RewardRun): string {
+  const pack = run.rewardpack;
+  if (!pack.verified) return rewardPackStatus(run);
+  const criteria = pack.criteria.map((criterion) => [
+    `### ${ROLE_LABELS[criterion.role] || criterion.role} · ${criterion.id}`,
+    '',
+    criterion.question,
+  ].join('\n')).join('\n\n');
+  const probes = pack.probes.map((probe) => {
+    const matrix = probe.expectations
+      .map((item) => `${item.scenario}→${item.outcome}`)
+      .join('，');
+    return `- ${probe.admitted ? '✅' : '⚠️'} **${probe.id}** · ${probe.verification_mode || 'unknown'}\n  ${probe.description}${matrix ? `（${matrix}）` : ''}`;
+  }).join('\n');
+  const boundary = pack.boundary.teacher_gold_access
+    ? 'Gold-assisted Builder；Actor/Critic 无 Gold；未使用 hidden tests'
+    : 'Answer-blind Builder/Actor/Critic；未使用 hidden tests';
+  return [
+    `## RewardPack · ${run.task.task_id}`,
+    '',
+    `**认证：${pack.passed}/${pack.probe_count} probes · ${boundary}**`,
+    '',
+    criteria,
+    '',
+    '### 已认证 probes',
+    '',
+    probes || '- 暂无 probe',
+  ].join('\n');
+}
+
 export function progressStatus(run: RewardRun): string {
   if (isTerminal(run)) return finalSummary(run);
   const phase = STAGES.includes(run.phase as Stage) ? STAGE_LABELS[run.phase as Stage] : '任务排队';
@@ -86,6 +127,7 @@ export function progressStatus(run: RewardRun): string {
 
 export function answerForIntent(intent: RewardChatIntent, run: RewardRun): string | null {
   if (intent === 'rewardpack_status') return rewardPackStatus(run);
+  if (intent === 'rewardpack_content') return rewardPackContent(run);
   if (intent === 'progress') return progressStatus(run);
   if (intent === 'patch') {
     return run.patch.available

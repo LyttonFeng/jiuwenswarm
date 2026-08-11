@@ -9,7 +9,7 @@ import type {
 const API_BASE = (
   import.meta.env.VITE_SWARM_REWARD_API_BASE || 'http://127.0.0.1:8765'
 ).replace(/\/$/, '');
-const EXPECTED_PROTOCOL_VERSION = 'swarm_reward.web_chat.v2';
+const EXPECTED_PROTOCOL_VERSION = 'swarm_reward.web_chat.v3';
 
 function assertProtocol(version: string): void {
   if (version !== EXPECTED_PROTOCOL_VERSION) {
@@ -60,6 +60,24 @@ export async function startRewardRun(taskId: string, packMode: PackMode): Promis
   return request('/api/runs', {
     method: 'POST',
     body: JSON.stringify({ task_id: taskId, pack_mode: packMode }),
+  });
+}
+
+export async function startRewardPackBuild(taskId: string, packMode: PackMode): Promise<RewardRun> {
+  return request('/api/rewardpacks', {
+    method: 'POST',
+    body: JSON.stringify({ task_id: taskId, pack_mode: packMode }),
+  });
+}
+
+export async function loadLatestRewardPack(taskId: string): Promise<RewardRun> {
+  return request(`/api/rewardpacks/latest?task_id=${encodeURIComponent(taskId)}`);
+}
+
+export async function startActorCriticFromRewardPack(taskId: string): Promise<RewardRun> {
+  return request('/api/runs/from-rewardpack', {
+    method: 'POST',
+    body: JSON.stringify({ task_id: taskId }),
   });
 }
 

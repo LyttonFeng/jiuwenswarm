@@ -3,10 +3,13 @@ import { useChatStore } from '../../stores';
 import type { MediaItem, ToolCall } from '../../types';
 import {
   cancelRewardRun,
+  loadLatestRewardPack,
   loadRecentRuns,
   loadRewardRun,
   loadRewardTasks,
   routeRewardMessage,
+  startActorCriticFromRewardPack,
+  startRewardPackBuild,
   startRewardRun,
 } from './api';
 import {
@@ -17,10 +20,11 @@ import {
   finalSummary,
   isTerminal,
   progressStatus,
+  rewardPackContent,
   stageResult,
   type Stage,
 } from './swarmRewardChatProtocol';
-import type { PackMode, RewardRun, RewardTaskPreset } from './types';
+import type { PackMode, RewardRun, RewardTaskPreset, RewardTimelineEvent } from './types';
 
 const POLL_INTERVAL_MS = 1_500;
 const WELCOME_MESSAGE_ID = 'swarm-reward-welcome';
@@ -30,6 +34,7 @@ type Progress = {
   activeStage: Stage | null;
   completedStages: Set<Stage>;
   latestHint: string;
+  publishedEvents: Map<string, string>;
   terminalPublished: boolean;
 };
 
@@ -100,10 +105,13 @@ export function useSwarmRewardChat(
     const progress = progressRef.current;
     if (!progress || progress.activeStage === stage || progress.completedStages.has(stage)) return;
     if (progress.activeStage) completeStage(progress.activeStage, next);
+    const label = stage === 'rewardpack' && next.rewardpack_source_run_id
+      ? '校验并载入已认证 RewardPack'
+      : STAGE_LABELS[stage];
     const toolCall: ToolCall = {
       id: `${next.run_id}-${stage}`,
       name: TOOL_NAMES[stage],
-      display_name: STAGE_LABELS[stage],
+      display_name: label,
       arguments: {
         task_id: next.task.task_id,
         pack_mode: next.pack_mode,
@@ -123,6 +131,37 @@ export function useSwarmRewardChat(
     addMessage(next.status === 'failed' ? 'system' : 'assistant', finalSummary(next));
   }, [addMessage, completeStage, sessionId]);
 
+  const publishTimelineEvent = useCallback((event: RewardTimelineEvent, next: RewardRun) => {
+    const progress = progressRef.current;
+    if (!progress) return;
+    const previousStatus = progress.publishedEvents.get(event.id);
+    if (!previousStatus) {
+      if (event.kind === 'critic_intervention') {
+        addMessage('assistant', `**${event.title}**\n\n> ${event.detail}`);
+      } else {
+        useChatStore.getState().addToolCall(sessionId, {
+          id: `${next.run_id}-${event.id}`,
+          name: `swarm_reward.${event.kind}`,
+          display_name: event.title,
+          arguments: { stage: event.stage, evidence: event.detail },
+        });
+      }
+    }
+    if (event.kind !== 'critic_intervention' && event.status !== 'running' && previousStatus !== event.status) {
+      useChatStore.getState().addToolResult(sessionId, {
+        toolName: `swarm_reward.${event.kind}`,
+        toolCallId: `${next.run_id}-${event.id}`,
+        result: event.detail,
+        success: event.status === 'completed',
+        summary: event.title,
+      });
+      if (event.kind === 'rewardpack_certified' && !previousStatus) {
+        addMessage('assistant', rewardPackContent(next));
+      }
+    }
+    progress.publishedEvents.set(event.id, event.status);
+  }, [addMessage, sessionId]);
+
   const publishRun = useCallback((next: RewardRun) => {
     if (!progressRef.current || progressRef.current.runId !== next.run_id) {
       progressRef.current = {
@@ -130,18 +169,21 @@ export function useSwarmRewardChat(
         activeStage: null,
         completedStages: new Set<Stage>(),
         latestHint: '',
+        publishedEvents: new Map<string, string>(),
         terminalPublished: false,
       };
     }
     const phase = STAGES.includes(next.phase as Stage) ? next.phase as Stage : null;
     if (phase) openStage(phase, next);
     const progress = progressRef.current;
-    if (next.actor.latest_hint && next.actor.latest_hint !== progress.latestHint) {
+    for (const event of next.timeline || []) publishTimelineEvent(event, next);
+    const timelineHasCritic = (next.timeline || []).some((event) => event.kind === 'critic_intervention');
+    if (!timelineHasCritic && next.actor.latest_hint && next.actor.latest_hint !== progress.latestHint) {
       progress.latestHint = next.actor.latest_hint;
       addMessage('assistant', `**Critic 介入**\n\n> ${next.actor.latest_hint}`);
     }
     if (isTerminal(next)) publishTerminal(next);
-  }, [addMessage, openStage, publishTerminal]);
+  }, [addMessage, openStage, publishTerminal, publishTimelineEvent]);
 
   const replayRun = useCallback((next: RewardRun) => {
     setSelectedTask(next.task);
@@ -150,6 +192,7 @@ export function useSwarmRewardChat(
       activeStage: null,
       completedStages: new Set<Stage>(),
       latestHint: '',
+      publishedEvents: new Map<string, string>(),
       terminalPublished: false,
     };
     addMessage('assistant', '下面回放一条**已经冻结并由官方 grader 验证**的真实运行。它不是新的模型采样。');
@@ -157,13 +200,10 @@ export function useSwarmRewardChat(
       openStage(stage, next);
       completeStage(stage, next);
     }
-    if (next.actor.latest_hint) {
-      progressRef.current.latestHint = next.actor.latest_hint;
-      addMessage('assistant', `**Critic 介入**\n\n> ${next.actor.latest_hint}`);
-    }
+    for (const event of next.timeline || []) publishTimelineEvent(event, next);
     publishTerminal(next);
     setRun(next);
-  }, [addMessage, completeStage, openStage, publishTerminal]);
+  }, [addMessage, completeStage, openStage, publishTerminal, publishTimelineEvent]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -229,6 +269,38 @@ export function useSwarmRewardChat(
     }
   }, [addMessage, publishRun, sessionId]);
 
+  const beginBuild = useCallback(async (task: RewardTaskPreset, mode: PackMode) => {
+    setSelectedTask(task);
+    useChatStore.getState().setProcessing(sessionId, true);
+    useChatStore.getState().setThinking(sessionId, true);
+    addMessage('assistant', `开始为 **${task.task_id}** 构建 ${mode === 'rebuild_gold_assisted' ? 'Gold-assisted' : 'Answer-blind'} RewardPack。构建轮次与沙箱认证结果会实时显示在这里；本次不会自动启动 Actor。`);
+    try {
+      const next = await startRewardPackBuild(task.task_id, mode);
+      setRun(next);
+      publishRun(next);
+    } catch (reason) {
+      useChatStore.getState().setProcessing(sessionId, false);
+      useChatStore.getState().setThinking(sessionId, false);
+      addMessage('system', `RewardPack 构建启动失败：${reason instanceof Error ? reason.message : String(reason)}`);
+    }
+  }, [addMessage, publishRun, sessionId]);
+
+  const beginFromPack = useCallback(async (task: RewardTaskPreset, source: RewardRun) => {
+    setSelectedTask(task);
+    useChatStore.getState().setProcessing(sessionId, true);
+    useChatStore.getState().setThinking(sessionId, true);
+    addMessage('assistant', `RewardPack 已认证（**${source.rewardpack.passed}/${source.rewardpack.probe_count} probes**）。现在跳过 Builder，按内容哈希复用这份 Pack，直接启动 **Actor-Critic**。`);
+    try {
+      const next = await startActorCriticFromRewardPack(task.task_id);
+      setRun(next);
+      publishRun(next);
+    } catch (reason) {
+      useChatStore.getState().setProcessing(sessionId, false);
+      useChatStore.getState().setThinking(sessionId, false);
+      addMessage('system', `Actor-Critic 启动失败：${reason instanceof Error ? reason.message : String(reason)}`);
+    }
+  }, [addMessage, publishRun, sessionId]);
+
   const send = useCallback(async (content: string, mediaItems?: MediaItem[]) => {
     const trimmed = content.trim();
     if (!enabled || !trimmed) return false;
@@ -271,6 +343,14 @@ export function useSwarmRewardChat(
           addMessage('assistant', progressStatus(run));
           return true;
         }
+        const existingPack = [run, ...availableRuns].find((item) =>
+          item?.task.task_id === task.task_id && item.rewardpack.verified,
+        );
+        if (existingPack) {
+          keepProcessing = true;
+          await beginFromPack(task, existingPack);
+          return true;
+        }
         const requestedMode = route.pack_mode;
         const mode = requestedMode && task.available_pack_modes.includes(requestedMode)
           ? requestedMode
@@ -279,6 +359,26 @@ export function useSwarmRewardChat(
             : task.available_pack_modes[0] || 'rebuild_answer_blind';
         keepProcessing = true;
         await beginRun(task, mode);
+        return true;
+      }
+
+      if (route.intent === 'build_rewardpack') {
+        if (!task) {
+          addMessage('assistant', '请先告诉我需要为哪项任务构建 RewardPack。');
+          return true;
+        }
+        if (run && !isTerminal(run)) {
+          addMessage('assistant', progressStatus(run));
+          return true;
+        }
+        const requestedMode = route.pack_mode;
+        const mode = requestedMode && task.available_pack_modes.includes(requestedMode)
+          ? requestedMode
+          : task.available_pack_modes.includes('rebuild_gold_assisted')
+            ? 'rebuild_gold_assisted'
+            : task.available_pack_modes[0] || 'rebuild_answer_blind';
+        keepProcessing = true;
+        await beginBuild(task, mode);
         return true;
       }
 
@@ -318,6 +418,33 @@ export function useSwarmRewardChat(
         return true;
       }
 
+      if (route.intent === 'rewardpack_status' && task) {
+        if (run && !isTerminal(run)) {
+          addMessage('assistant', rewardPackContent(run));
+          return true;
+        }
+        let source = [run, ...availableRuns].find((item) =>
+          item?.task.task_id === task.task_id && item.rewardpack.verified,
+        ) || null;
+        if (!source) {
+          try {
+            source = await loadLatestRewardPack(task.task_id);
+          } catch {
+            source = null;
+          }
+        } else {
+          source = await loadLatestRewardPack(task.task_id);
+        }
+        if (!source) {
+          addMessage('assistant', `**${task.task_id}** 还没有通过认证的 RewardPack。你可以让我现在构建。`);
+          return true;
+        }
+        addMessage('assistant', rewardPackContent(source));
+        keepProcessing = true;
+        await beginFromPack(task, source);
+        return true;
+      }
+
       const frozen = task
         ? availableRuns.find((item) => item.task.task_id === task.task_id && item.status === 'completed')
         : null;
@@ -349,7 +476,7 @@ export function useSwarmRewardChat(
         useChatStore.getState().setThinking(sessionId, false);
       }
     }
-  }, [addMessage, beginRun, enabled, ensureCatalog, publishRun, recentRuns, replayRun, run, selectedTask, sessionId, tasks]);
+  }, [addMessage, beginBuild, beginFromPack, beginRun, enabled, ensureCatalog, publishRun, recentRuns, replayRun, run, selectedTask, sessionId, tasks]);
 
   const cancelRun = useCallback(async () => {
     if (!run || isTerminal(run)) return;

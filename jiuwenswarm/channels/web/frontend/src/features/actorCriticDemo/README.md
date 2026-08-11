@@ -16,16 +16,27 @@ Each turn first passes through a small, non-reasoning semantic router:
   evidence projection.
 - Everything else falls through unchanged to JiuwenSwarm's normal Agent path.
 
-The Demo controller supports two execution semantics without command syntax:
+The Demo controller supports composable execution semantics without command syntax:
 
 - `演示 <task-id>` replays an already frozen, officially graded run. The UI labels
   it as replay and does not claim that a new model sample occurred.
 - `请解决 <task-id>` starts a new remote sandbox run and polls real pipeline state.
+- `构建 <task-id> 的 RewardPack` runs Builder and sandbox admission only. The chat
+  shows each completed Builder round, then renders Goal, Solution, criteria, and
+  admitted probes from the frozen Pack.
+- `RewardPack 构建好了吗？` answers from the latest certified Pack and immediately
+  starts Actor-Critic from a content-hash-verified copy. Builder is skipped.
+
+If `请解决` is sent when a certified Pack already exists, the same reuse path is
+used. The browser never chooses a server path or trusts a client-supplied Pack ID;
+the service resolves and validates the latest same-task Pack.
 
 The selected task is retained across turns, so natural follow-ups such as
 `RewardPack 好了吗？` or `那就开始吧` need not repeat the task ID. After either
 execution path, follow-up messages can inspect the patch, Critic intervention,
-official score, or open the corresponding dashboard run. Gold-assisted mode means
+official score, or open the corresponding dashboard run. Builder rounds, Actor tool
+actions, Critic interventions, and grader results appear as normal JiuwenSwarm tool
+events. Gold-assisted mode means
 only the offline RewardPack Builder sees Gold; Actor and online Critic do not.
 
 The separation keeps the research claim legible: conversation is the intervention
