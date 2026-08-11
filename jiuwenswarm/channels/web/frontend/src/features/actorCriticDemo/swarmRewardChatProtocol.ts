@@ -23,6 +23,12 @@ export function isTerminal(run: RewardRun): boolean {
 }
 
 export function stageResult(run: RewardRun, stage: Stage): string {
+  if (run.status === 'cancelled' && run.phase === stage) {
+    if (stage === 'actor') {
+      return `Actor-Critic 已由用户停止。Actor 已执行 ${run.actor.tool_calls} 次工具调用；Critic 已审阅 ${run.actor.turns_reviewed} 次，介入 ${run.actor.interventions} 次；未进入官方评分。`;
+    }
+    return `${STAGE_LABELS[stage]} 已由用户停止。`;
+  }
   if (stage === 'workspace') return `工作区已就绪：${run.workspace_path || '/testbed'}`;
   if (stage === 'rewardpack') {
     return run.rewardpack.verified
@@ -38,6 +44,29 @@ export function stageResult(run: RewardRun, stage: Stage): string {
 }
 
 export function finalSummary(run: RewardRun): string {
+  if (run.status === 'cancelled') {
+    if (run.operation === 'build_rewardpack') {
+      return [
+        `任务 **${run.task.task_id}** 的 RewardPack 构建已由用户停止。`,
+        '',
+        '本次没有冻结新 RewardPack，也没有启动 Actor-Critic。这不是构建成功或失败的实验结论。',
+      ].join('\n');
+    }
+    const frozenPack = run.rewardpack.verified
+      ? `${run.rewardpack.passed}/${run.rewardpack.probe_count} probes（仍可复用）`
+      : '未认证';
+    return [
+      `任务 **${run.task.task_id}** 已由用户停止。`,
+      '',
+      `- RewardPack：${frozenPack}`,
+      `- Actor：${run.actor.tool_calls} 次工具调用`,
+      `- Critic：${run.actor.turns_reviewed} 次审阅，${run.actor.interventions} 次介入`,
+      `- 补丁：${run.patch.available && run.patch.bytes > 0 ? `已保存 ${run.patch.bytes} bytes 的中间补丁` : '未产生可交付补丁'}`,
+      '- 官方评分：未进入 grader，无 resolved/unresolved 结论',
+      '',
+      '你可以复用同一份冻结 RewardPack 重新运行 Actor-Critic。',
+    ].join('\n');
+  }
   if (run.operation === 'build_rewardpack') {
     return run.rewardpack.verified
       ? `任务 **${run.task.task_id}** 的 RewardPack 已构建、通过沙箱认证并冻结：**${run.rewardpack.passed}/${run.rewardpack.probe_count} probes**。你可以查看内容，或让我用它启动 Actor-Critic。`

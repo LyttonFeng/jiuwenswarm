@@ -6,6 +6,7 @@ import type { ReasoningSegment } from '../../stores/chatStore';
 import { getMessageActor } from '../../components/ChatPanel/MessageItem';
 import {
   collectViewedSkillIds,
+  isToolExecutionCancelled,
   isToolExecutionFailed,
 } from '../../components/ChatPanel/ToolGroupDisplay';
 import { isTeamMemberCollaborationMessage } from '../../components/ChatPanel/teamEventUtils';
@@ -501,8 +502,8 @@ function insertTurnSummaries(items: RenderItem[], isProcessing: boolean): Render
   return out;
 }
 
-/** 折叠芯片图标色：全成功绿勾 / 有失败但还有成功项→部分失败 / 全失败红叉 / 无工具中性绿 */
-export type WorkOutcomeTone = 'success' | 'partial' | 'error' | 'neutral';
+/** 折叠芯片图标色：取消是独立终态，不是成功或失败。 */
+export type WorkOutcomeTone = 'success' | 'partial' | 'error' | 'cancelled' | 'neutral';
 
 /**
  * @param successCount 成功的工具数
@@ -512,9 +513,13 @@ export type WorkOutcomeTone = 'success' | 'partial' | 'error' | 'neutral';
 export function resolveWorkOutcomeTone(
   successCount: number,
   failedCount: number,
-  thinkingCount = 0
+  thinkingCount = 0,
+  cancelledCount = 0
 ): WorkOutcomeTone {
   const hasSuccessWork = successCount > 0 || thinkingCount > 0;
+  if (cancelledCount > 0) {
+    return 'cancelled';
+  }
   if (failedCount <= 0) {
     return hasSuccessWork ? 'success' : 'neutral';
   }
@@ -526,7 +531,7 @@ export function resolveWorkOutcomeTone(
 
 function accumulateToolOutcomes(
   executions: ToolExecution[],
-  into: { toolSuccessCount: number; toolFailedCount: number }
+  into: { toolSuccessCount: number; toolFailedCount: number; toolCancelledCount: number }
 ): void {
   for (const execution of executions) {
     if (isDeliverableToolName(execution.toolCall.name)) {
@@ -535,7 +540,9 @@ function accumulateToolOutcomes(
     if (isExecutionRunning(execution)) {
       continue;
     }
-    if (isToolExecutionFailed(execution)) {
+    if (isToolExecutionCancelled(execution)) {
+      into.toolCancelledCount += 1;
+    } else if (isToolExecutionFailed(execution)) {
       into.toolFailedCount += 1;
     } else {
       into.toolSuccessCount += 1;
@@ -557,6 +564,7 @@ export type TurnWorkMeta = {
   toolCount: number;
   toolSuccessCount: number;
   toolFailedCount: number;
+  toolCancelledCount: number;
   outcomeTone: WorkOutcomeTone;
 };
 
@@ -578,7 +586,8 @@ function isExecutionRunning(execution: ToolExecution): boolean {
   if (
     execution.status === 'completed' ||
     execution.status === 'error' ||
-    execution.status === 'timeout'
+    execution.status === 'timeout' ||
+    execution.status === 'cancelled'
   ) {
     return false;
   }
@@ -607,6 +616,7 @@ function emptyTurnMeta(turnId: number, partial?: Partial<TurnWorkMeta>): TurnWor
     toolCount: 0,
     toolSuccessCount: 0,
     toolFailedCount: 0,
+    toolCancelledCount: 0,
     outcomeTone: 'neutral',
     ...partial,
   };
@@ -634,6 +644,7 @@ export function buildTurnWorkMeta(items: RenderItem[], isProcessing: boolean): M
           toolCount: prev?.toolCount ?? 0,
           toolSuccessCount: prev?.toolSuccessCount ?? 0,
           toolFailedCount: prev?.toolFailedCount ?? 0,
+          toolCancelledCount: prev?.toolCancelledCount ?? 0,
           outcomeTone: prev?.outcomeTone ?? 'neutral',
         })
       );
@@ -692,7 +703,8 @@ export function buildTurnWorkMeta(items: RenderItem[], isProcessing: boolean): M
     meta.outcomeTone = resolveWorkOutcomeTone(
       meta.toolSuccessCount,
       meta.toolFailedCount,
-      meta.thinkingCount
+      meta.thinkingCount,
+      meta.toolCancelledCount
     );
     // 折叠条是该轮顶部锚点：只要本轮有可折叠工作，头像就归折叠条，避免被中间气泡抢走后整轮「没头像」。
     if (meta.hasWork) {
@@ -741,6 +753,7 @@ export type LiveWorkStreak = {
   toolCount: number;
   toolSuccessCount: number;
   toolFailedCount: number;
+  toolCancelledCount: number;
   outcomeTone: WorkOutcomeTone;
   showAvatar: boolean;
 };
@@ -859,7 +872,7 @@ export function streakMapFingerprint(streaks: Map<string, LiveWorkStreak>): stri
   return [...streaks.values()]
     .map(
       (streak) =>
-        `${streak.id}:${streak.thinkingCount}:${streak.toolCount}:${streak.toolSuccessCount}:${streak.toolFailedCount}:${streak.outcomeTone}:${[...streak.keys].join(',')}`
+        `${streak.id}:${streak.thinkingCount}:${streak.toolCount}:${streak.toolSuccessCount}:${streak.toolFailedCount}:${streak.toolCancelledCount}:${streak.outcomeTone}:${[...streak.keys].join(',')}`
     )
     .sort()
     .join('|');
@@ -915,7 +928,8 @@ export function buildLiveCompletedStreaks(
       streak.outcomeTone = resolveWorkOutcomeTone(
         streak.toolSuccessCount,
         streak.toolFailedCount,
-        streak.thinkingCount
+        streak.thinkingCount,
+        streak.toolCancelledCount
       );
       sealed.set(streak.firstKey, streak);
     }
@@ -934,6 +948,7 @@ export function buildLiveCompletedStreaks(
       toolCount: 0,
       toolSuccessCount: 0,
       toolFailedCount: 0,
+      toolCancelledCount: 0,
       outcomeTone: 'neutral',
       showAvatar: item.showAvatar,
     };
@@ -988,6 +1003,9 @@ export function formatStreakSummaryLabel(
   toolCount: number,
   outcomeTone: WorkOutcomeTone = 'neutral'
 ): string {
+  if (outcomeTone === 'cancelled') {
+    return t('chatUi.workCancelledFallback');
+  }
   // 工具全失败且无成功思考：文案用「失败」，不要「已完成」。
   if (outcomeTone === 'error' && toolCount > 0 && thinkingCount <= 0) {
     return t('chatUi.workFailedToolsNoDuration', { tools: toolCount });

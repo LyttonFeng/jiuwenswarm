@@ -115,12 +115,14 @@ export interface ToolResult {
   summary?: string;  // 结果摘要
   /** 历史/实时结果显式标记为超时（与 success=false 一起用于展示「执行失败」） */
   timedOut?: boolean;
+  /** 用户主动停止：独立于成功/失败，不得伪装成任一结果。 */
+  cancelled?: boolean;
   // agentic search（symphony 技能检索）下发的技能树路径，用于内联回放路径流转
   skillTree?: SkillTreePath;
   beamSearch?: BeamSearchProgress;
 }
 
-export type ToolExecutionStatus = 'pending' | 'timeout' | 'completed' | 'error';
+export type ToolExecutionStatus = 'pending' | 'timeout' | 'completed' | 'error' | 'cancelled';
 
 export interface ToolExecution {
   toolCallId: string;

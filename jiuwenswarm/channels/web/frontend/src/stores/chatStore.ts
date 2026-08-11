@@ -50,6 +50,9 @@ function computeTimeoutAt(baseIso: string): string {
 }
 
 function resolveExecutionStatus(result: ToolResult): ToolExecutionStatus {
+  if (result.cancelled) {
+    return 'cancelled';
+  }
   if (result.timedOut) {
     return 'timeout';
   }

@@ -25,6 +25,7 @@ import {
   REASONING_COLLAPSE_DELAY_MS,
   STREAK_FOLD_TRANSITION_DELAY_MS,
   type LiveWorkStreak,
+  type WorkOutcomeTone,
 } from '../../features/chatTimeline/buildTurnTimeline';
 
 const EMPTY_REASONING: ReasoningSegment[] = [];
@@ -121,7 +122,7 @@ function CompletedWorkChip({
   variant: 'turn' | 'streak';
   thinkingCount?: number;
   toolCount?: number;
-  outcomeTone?: 'success' | 'partial' | 'error' | 'neutral';
+  outcomeTone?: WorkOutcomeTone;
   expanded: boolean;
   onToggle: () => void;
   showAvatar: boolean;
@@ -130,17 +131,22 @@ function CompletedWorkChip({
   const { t } = useTranslation();
   // 耗时统一由底部 TurnElapsed 展示，避免「已完成」在上、「任务用时」在下两套位置互相打架。
   const label =
-    variant === 'turn'
+    outcomeTone === 'cancelled'
+      ? t('chatUi.workCancelledFallback')
+      : variant === 'turn'
       ? t('chatUi.workCompletedFallback')
       : formatStreakSummaryLabel(t, thinkingCount, toolCount, outcomeTone);
-  // 最外层「已完成」始终绿勾；展开后的 streak：全成功绿勾 / 部分失败黄勾+标签 / 全失败红叉。
-  const applyOutcome = variant === 'streak';
+  // 用户取消必须贯穿到最外层；其他旧轮次保持原有折叠语义。
+  const applyOutcome = variant === 'streak' || outcomeTone === 'cancelled';
   const showErrorIcon = applyOutcome && outcomeTone === 'error';
+  const showCancelledIcon = outcomeTone === 'cancelled';
   const showPartialBadge = applyOutcome && outcomeTone === 'partial';
   const toneClass = !applyOutcome
     ? 'is-success'
     : outcomeTone === 'error'
       ? 'is-error'
+      : outcomeTone === 'cancelled'
+        ? 'is-cancelled'
       : outcomeTone === 'partial'
         ? 'is-partial'
         : 'is-success';
@@ -158,7 +164,12 @@ function CompletedWorkChip({
       aria-expanded={expanded}
     >
       <span className={clsx('completed-work-chip__icon', toneClass)} aria-hidden="true">
-        {showErrorIcon ? (
+        {showCancelledIcon ? (
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <circle cx="10" cy="10" r="6.5" />
+            <path d="M7.2 10h5.6" />
+          </svg>
+        ) : showErrorIcon ? (
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="10" cy="10" r="6.5" />
             <path d="m7.6 7.6 4.8 4.8M12.4 7.6l-4.8 4.8" />

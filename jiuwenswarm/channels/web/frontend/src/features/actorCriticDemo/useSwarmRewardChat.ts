@@ -52,6 +52,18 @@ function timestamp(): string {
   return new Date().toISOString();
 }
 
+type DisplayEventStatus = RewardTimelineEvent['status'] | 'failed' | 'cancelled';
+
+/** 已终止的 run 不能在历史回放中留下「正在执行」的幽灵事件。 */
+function displayEventStatus(event: RewardTimelineEvent, run: RewardRun): DisplayEventStatus {
+  if (event.status !== 'running' || !isTerminal(run)) return event.status;
+  if (run.status === 'completed') return 'completed';
+  const eventIndex = STAGES.indexOf(event.stage);
+  const phaseIndex = STAGES.indexOf(run.phase as Stage);
+  if (phaseIndex >= 0 && eventIndex < phaseIndex) return 'completed';
+  return run.status === 'cancelled' ? 'cancelled' : 'failed';
+}
+
 export function useSwarmRewardChat(
   enabled: boolean,
   sessionId: string,
@@ -96,11 +108,14 @@ export function useSwarmRewardChat(
   const completeStage = useCallback((stage: Stage, next: RewardRun) => {
     const progress = progressRef.current;
     if (!progress || progress.completedStages.has(stage)) return;
+    const cancelled = next.status === 'cancelled' && next.phase === stage;
+    const failed = next.status === 'failed' && next.phase === stage;
     useChatStore.getState().addToolResult(sessionId, {
       toolName: TOOL_NAMES[stage],
       toolCallId: `${next.run_id}-${stage}`,
       result: stageResult(next, stage),
-      success: next.status !== 'failed',
+      success: !failed && !cancelled,
+      ...(cancelled ? { cancelled: true } : {}),
       summary: STAGE_LABELS[stage],
     });
     progress.completedStages.add(stage);
@@ -139,6 +154,7 @@ export function useSwarmRewardChat(
   const publishTimelineEvent = useCallback((event: RewardTimelineEvent, next: RewardRun) => {
     const progress = progressRef.current;
     if (!progress) return;
+    const visibleStatus = displayEventStatus(event, next);
     const previousStatus = progress.publishedEvents.get(event.id);
     if (!previousStatus) {
       if (event.kind === 'critic_intervention') {
@@ -152,12 +168,14 @@ export function useSwarmRewardChat(
         });
       }
     }
-    if (event.kind !== 'critic_intervention' && event.status !== 'running' && previousStatus !== event.status) {
+    if (event.kind !== 'critic_intervention' && visibleStatus !== 'running' && previousStatus !== visibleStatus) {
+      const cancelled = visibleStatus === 'cancelled';
       useChatStore.getState().addToolResult(sessionId, {
         toolName: `swarm_reward.${event.kind}`,
         toolCallId: `${next.run_id}-${event.id}`,
         result: event.detail,
-        success: event.status === 'completed',
+        success: visibleStatus === 'completed' || visibleStatus === 'revised',
+        ...(cancelled ? { cancelled: true } : {}),
         summary: event.title,
       });
       if (event.kind === 'rewardpack_certified' && !previousStatus) {
@@ -166,7 +184,7 @@ export function useSwarmRewardChat(
           : rewardPackContent(next));
       }
     }
-    progress.publishedEvents.set(event.id, event.status);
+    progress.publishedEvents.set(event.id, visibleStatus);
   }, [addMessage, sessionId]);
 
   const publishRun = useCallback((next: RewardRun) => {
@@ -202,8 +220,17 @@ export function useSwarmRewardChat(
       publishedEvents: new Map<string, string>(),
       terminalPublished: false,
     };
-    addMessage('assistant', '下面回放一条**已经冻结并由官方 grader 验证**的真实运行。它不是新的模型采样。');
-    for (const stage of STAGES) {
+    const replayBoundary = next.grader.complete
+      ? '下面回放一条**已经冻结并由官方 grader 验证**的真实运行。它不是新的模型采样。'
+      : next.status === 'cancelled'
+        ? '下面回放一条**由用户停止、未进入官方 grader**的真实运行记录。它不是新的模型采样。'
+        : '下面回放一条**在官方评分前结束**的真实运行记录。它不是新的模型采样。';
+    addMessage('assistant', replayBoundary);
+    const terminalStageIndex = STAGES.indexOf(next.phase as Stage);
+    const replayStages = isTerminal(next) && next.status !== 'completed' && terminalStageIndex >= 0
+      ? STAGES.slice(0, terminalStageIndex + 1)
+      : STAGES;
+    for (const stage of replayStages) {
       openStage(stage, next);
       completeStage(stage, next);
     }

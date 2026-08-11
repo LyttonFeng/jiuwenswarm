@@ -46,6 +46,14 @@ test('pending execution is not dropped when an error result arrives', () => {
   assert.equal(shouldDropToolResult('error', errorResult, errorResult), true);
 });
 
+test('cancelled result has its own terminal lifecycle', () => {
+  const cancelledResult = result({ success: false, cancelled: true, result: 'stopped by user' });
+
+  assert.equal(shouldDropToolResult('pending', cancelledResult, cancelledResult), false);
+  assert.equal(shouldDropToolResult('error', cancelledResult, cancelledResult), false);
+  assert.equal(shouldDropToolResult('cancelled', cancelledResult, cancelledResult), true);
+});
+
 test('beam graph participates in duplicate detection', () => {
   const first = result({ beamSearch: { roundIndex: 1, graph: { nodes: [], edges: [] } } });
   const second = result({ beamSearch: { roundIndex: 2, graph: { nodes: [], edges: [] } } });

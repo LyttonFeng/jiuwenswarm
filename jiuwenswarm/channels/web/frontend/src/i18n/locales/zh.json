@@ -1967,6 +1967,7 @@
     "turnElapsed": "任务用时",
     "workCompleted": "已完成 {{duration}}",
     "workCompletedFallback": "已完成",
+    "workCancelledFallback": "已取消",
     "workCompletedBoth": "已完成 {{thinking}} 次思考，{{tools}} 次工具调用 · {{duration}}",
     "workCompletedBothNoDuration": "已完成 {{thinking}} 次思考，{{tools}} 次工具调用",
     "workCompletedThinking": "已完成 {{thinking}} 次思考 · {{duration}}",
@@ -2011,6 +2012,7 @@
     },
     "toolResult": {
       "success": "完成",
+      "cancelled": "已取消",
       "failed": "失败",
       "timeout": "执行超时",
       "running": "执行中...",
@@ -2022,6 +2024,7 @@
     "toolGroup": {
       "running": "正在{{label}}",
       "completed": "已完成{{label}}",
+      "cancelled": "已取消{{label}}",
       "failed": "{{label}}执行失败",
       "category": {
         "file": "文件操作",

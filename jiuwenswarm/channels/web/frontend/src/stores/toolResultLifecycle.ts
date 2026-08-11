@@ -14,12 +14,17 @@ function hasSameResultData(existing: ToolResult, incoming: ToolResult): boolean 
   return (
     existing.result === incoming.result &&
     existing.success === incoming.success &&
+    Boolean(existing.cancelled) === Boolean(incoming.cancelled) &&
     (existing.summary || '') === (incoming.summary || '') &&
     existing.beamSearch === incoming.beamSearch
   );
 }
 
 export function shouldDropToolResult(currentStatus: ToolExecutionStatus, existing: ToolResult | undefined, incoming: ToolResult): boolean {
-  const finalStatus: ToolExecutionStatus = incoming.success ? 'completed' : 'error';
+  const finalStatus: ToolExecutionStatus = incoming.cancelled
+    ? 'cancelled'
+    : incoming.success
+      ? 'completed'
+      : 'error';
   return currentStatus === finalStatus && existing !== undefined && hasSameResultData(existing, incoming);
 }

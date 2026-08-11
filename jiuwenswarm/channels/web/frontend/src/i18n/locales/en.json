@@ -1969,6 +1969,7 @@
     "turnElapsed": "Took",
     "workCompleted": "Completed {{duration}}",
     "workCompletedFallback": "Completed",
+    "workCancelledFallback": "Cancelled",
     "workCompletedBoth": "Completed {{thinking}} thoughts, {{tools}} tool calls · {{duration}}",
     "workCompletedBothNoDuration": "Completed {{thinking}} thoughts, {{tools}} tool calls",
     "workCompletedThinking": "Completed {{thinking}} thoughts · {{duration}}",
@@ -2013,6 +2014,7 @@
     },
     "toolResult": {
       "success": "done",
+      "cancelled": "cancelled",
       "failed": "failed",
       "timeout": "Execution timed out",
       "running": "Running...",
@@ -2024,6 +2026,7 @@
     "toolGroup": {
       "running": "Running {{label}}",
       "completed": "Completed {{label}}",
+      "cancelled": "Cancelled {{label}}",
       "failed": "{{label}} failed",
       "category": {
         "file": "file operations",

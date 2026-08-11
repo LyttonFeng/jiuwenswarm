@@ -58,14 +58,21 @@ export function isToolResultSuccessful(result?: ToolExecution['result']) {
   if (!result) {
     return false;
   }
-  if (result.timedOut) {
+  if (result.timedOut || result.cancelled) {
     return false;
   }
   return Boolean(result.success && !result.result.includes('success=False'));
 }
 
-/** 失败与超时统一按失败态展示（文案可区分超时）。 */
+export function isToolExecutionCancelled(execution: ToolExecution): boolean {
+  return execution.status === 'cancelled' || Boolean(execution.result?.cancelled);
+}
+
+/** 失败与超时统一按失败态展示；用户取消是独立终态。 */
 export function isToolExecutionFailed(execution: ToolExecution): boolean {
+  if (isToolExecutionCancelled(execution)) {
+    return false;
+  }
   if (execution.status === 'error' || execution.status === 'timeout') {
     return true;
   }
@@ -153,8 +160,9 @@ function ToolExecutionDetails({ execution }: { execution: ToolExecution }) {
   const { t } = useTranslation();
   const { toolCall, result, status } = execution;
   const isTimeout = status === 'timeout' || Boolean(result?.timedOut);
+  const cancelled = isToolExecutionCancelled(execution);
   const failed = isToolExecutionFailed(execution);
-  const resultSuccess = Boolean(result) && !failed;
+  const resultSuccess = Boolean(result) && !failed && !cancelled;
   const hasArguments = Object.keys(toolCall.arguments).length > 0;
   const toolNameLabel = toolCall.name?.trim() || result?.toolName || 'tool';
 
@@ -193,6 +201,11 @@ function ToolExecutionDetails({ execution }: { execution: ToolExecution }) {
                 )}
               >
                 {isTimeout ? t('chatUi.toolResult.timeout') : t('chatUi.toolResult.failed')}
+              </span>
+            )}
+            {cancelled && (
+              <span className="tool-tree-item__detail-badge is-cancelled">
+                {t('chatUi.toolResult.cancelled')}
               </span>
             )}
             {resultSuccess && (
@@ -241,7 +254,8 @@ function isDisplayRunning(execution: ToolExecution): boolean {
   if (
     execution.status === 'completed' ||
     execution.status === 'error' ||
-    execution.status === 'timeout'
+    execution.status === 'timeout' ||
+    execution.status === 'cancelled'
   ) {
     return false;
   }
@@ -256,6 +270,7 @@ interface GroupHeaderLine {
   category: ToolCategory;
   text: string;
   running: boolean;
+  cancelled: boolean;
   failed: boolean;
   executions: ToolExecution[];
 }
@@ -272,19 +287,23 @@ function buildGroupLines(
   return executions.map((execution) => {
     const category = classifyToolCall(execution.toolCall.name);
     const running = isDisplayRunning(execution);
-    const failed = !running && isToolExecutionFailed(execution);
+    const cancelled = !running && isToolExecutionCancelled(execution);
+    const failed = !running && !cancelled && isToolExecutionFailed(execution);
     const label = getExecutionLabel(execution, sessionCompletedLabel, t);
     return {
       key: execution.toolCallId,
       category,
       running,
+      cancelled,
       failed,
       executions: [execution],
       text: running
         ? t('chatUi.toolGroup.running', { label })
-        : failed
-          ? t('chatUi.toolGroup.failed', { label })
-          : t('chatUi.toolGroup.completed', { label }),
+        : cancelled
+          ? t('chatUi.toolGroup.cancelled', { label })
+          : failed
+            ? t('chatUi.toolGroup.failed', { label })
+            : t('chatUi.toolGroup.completed', { label }),
     };
   });
 }
@@ -401,6 +420,7 @@ export function ToolGroupDisplay({
                       className={clsx(
                         'tool-tree__header-line-text',
                         line.running && 'is-running',
+                        line.cancelled && 'is-cancelled',
                         line.failed && 'is-failed'
                       )}
                     >
