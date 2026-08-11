@@ -9,13 +9,22 @@ The demo has two deliberately separate user surfaces:
 - `/swarm-reward` is the experiment dashboard. It inspects a run but does not
   pretend to be an Agent conversation.
 
-The chat accepts two explicit execution semantics:
+Each turn first passes through a small, non-reasoning semantic router:
+
+- Demo control/status intent stays in the Swarm Reward controller. The model only
+  classifies the turn; deterministic code owns process start, cancellation, and
+  evidence projection.
+- Everything else falls through unchanged to JiuwenSwarm's normal Agent path.
+
+The Demo controller supports two execution semantics without command syntax:
 
 - `演示 <task-id>` replays an already frozen, officially graded run. The UI labels
   it as replay and does not claim that a new model sample occurred.
 - `请解决 <task-id>` starts a new remote sandbox run and polls real pipeline state.
 
-After either path, follow-up messages can inspect the patch, Critic intervention,
+The selected task is retained across turns, so natural follow-ups such as
+`RewardPack 好了吗？` or `那就开始吧` need not repeat the task ID. After either
+execution path, follow-up messages can inspect the patch, Critic intervention,
 official score, or open the corresponding dashboard run. Gold-assisted mode means
 only the offline RewardPack Builder sees Gold; Actor and online Critic do not.
 

@@ -69,3 +69,23 @@ export interface RewardRun {
   patch: PatchStatus;
   grader: GraderStatus;
 }
+
+export type RewardChatIntent =
+  | 'task_context'
+  | 'start_run'
+  | 'replay_run'
+  | 'rewardpack_status'
+  | 'progress'
+  | 'patch'
+  | 'critic'
+  | 'grader'
+  | 'explain'
+  | 'dashboard'
+  | 'cancel';
+
+export interface RewardChatRoute {
+  scope: 'demo' | 'general';
+  intent: RewardChatIntent | null;
+  task_id: string | null;
+  pack_mode: PackMode | null;
+}

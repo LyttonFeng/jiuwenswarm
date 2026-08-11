@@ -6,30 +6,24 @@ import {
   loadRecentRuns,
   loadRewardRun,
   loadRewardTasks,
+  routeRewardMessage,
   startRewardRun,
 } from './api';
+import {
+  STAGES,
+  STAGE_LABELS,
+  TOOL_NAMES,
+  answerForIntent,
+  finalSummary,
+  isTerminal,
+  progressStatus,
+  stageResult,
+  type Stage,
+} from './swarmRewardChatProtocol';
 import type { PackMode, RewardRun, RewardTaskPreset } from './types';
 
 const POLL_INTERVAL_MS = 1_500;
 const WELCOME_MESSAGE_ID = 'swarm-reward-welcome';
-
-type Stage = 'workspace' | 'rewardpack' | 'actor' | 'grader';
-
-const STAGES: Stage[] = ['workspace', 'rewardpack', 'actor', 'grader'];
-
-const TOOL_NAMES: Record<Stage, string> = {
-  workspace: 'swarm_reward.load_workspace',
-  rewardpack: 'swarm_reward.build_rewardpack',
-  actor: 'swarm_reward.actor_critic',
-  grader: 'swarm_reward.official_grader',
-};
-
-const STAGE_LABELS: Record<Stage, string> = {
-  workspace: '载入冻结工作区',
-  rewardpack: '构建并认证 RewardPack',
-  actor: 'Actor-Critic 修复',
-  grader: '官方 Docker grader',
-};
 
 type Progress = {
   runId: string;
@@ -42,118 +36,12 @@ type Progress = {
 export type SwarmRewardChatController = {
   enabled: boolean;
   activeTaskId: string;
-  send: (content: string, mediaItems?: MediaItem[]) => Promise<void>;
+  send: (content: string, mediaItems?: MediaItem[]) => Promise<boolean>;
   cancel: () => Promise<void>;
 };
 
 function timestamp(): string {
   return new Date().toISOString();
-}
-
-function normalizeTaskIdentity(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-function isTerminal(run: RewardRun): boolean {
-  return ['completed', 'failed', 'cancelled'].includes(run.status);
-}
-
-function wantsReplay(content: string): boolean {
-  return /(?:回放|复现|演示|已完成|历史运行)/i.test(content);
-}
-
-function wantsFreshRun(content: string): boolean {
-  return /(?:重新求解|重新运行|新运行|从头运行|开始修复|请解决|请修复|再跑)/i.test(content);
-}
-
-function preferredMode(content: string, task: RewardTaskPreset): PackMode {
-  if (/answer[ -]?blind|未知题|不看\s*gold/i.test(content)
-      && task.available_pack_modes.includes('rebuild_answer_blind')) {
-    return 'rebuild_answer_blind';
-  }
-  if (task.available_pack_modes.includes('rebuild_gold_assisted')) {
-    return 'rebuild_gold_assisted';
-  }
-  return task.available_pack_modes[0] || 'rebuild_answer_blind';
-}
-
-function matchTask(content: string, tasks: RewardTaskPreset[]): RewardTaskPreset | null {
-  const normalized = normalizeTaskIdentity(content);
-  const exact = tasks.find((task) => normalized.includes(normalizeTaskIdentity(task.task_id)));
-  if (exact) return exact;
-  const byTitle = tasks.find((task) => normalized.includes(normalizeTaskIdentity(task.title)));
-  if (byTitle) return byTitle;
-  return tasks.length === 1 && /django|issue|任务|修复|演示|运行/i.test(content) ? tasks[0] : null;
-}
-
-function stageResult(run: RewardRun, stage: Stage): string {
-  if (stage === 'workspace') {
-    return `工作区已就绪：${run.workspace_path || '/testbed'}`;
-  }
-  if (stage === 'rewardpack') {
-    return run.rewardpack.verified
-      ? `RewardPack 已认证：${run.rewardpack.passed}/${run.rewardpack.probe_count} probes 通过。`
-      : 'RewardPack 未通过认证。';
-  }
-  if (stage === 'actor') {
-    return `Actor 完成 ${run.actor.tool_calls} 次工具调用；Critic 审阅 ${run.actor.turns_reviewed} 次，介入 ${run.actor.interventions} 次。`;
-  }
-  return run.grader.complete
-    ? `官方评分：${run.grader.resolved} resolved，${run.grader.unresolved} unresolved，${run.grader.errors} error。`
-    : '官方评分未完成。';
-}
-
-function finalSummary(run: RewardRun): string {
-  const verdict = run.grader.complete
-    ? `**${run.grader.resolved}/1 resolved**`
-    : `运行状态：**${run.status}**`;
-  const packBoundary = run.pack_mode === 'rebuild_gold_assisted'
-    ? 'Builder 使用 Gold；Actor 与 Critic 未看到 Gold。'
-    : 'RewardPack、Actor 与 Critic 均未使用 Gold。';
-  return [
-    `任务 **${run.task.task_id}** 已结束，官方结果为 ${verdict}。`,
-    '',
-    `- RewardPack：${run.rewardpack.passed}/${run.rewardpack.probe_count} probes`,
-    `- Actor：${run.actor.tool_calls} 次工具调用`,
-    `- Critic：${run.actor.turns_reviewed} 次审阅，${run.actor.interventions} 次介入`,
-    `- 实验边界：${packBoundary}`,
-    '',
-    `你可以继续问：**解释改动**、**查看补丁**、**Critic 为什么介入**、**查看评分**，或输入 **重新运行 ${run.task.task_id}**。`,
-    '',
-    `[打开独立实验仪表盘](/swarm-reward?run=${encodeURIComponent(run.run_id)})`,
-  ].join('\n');
-}
-
-function followupAnswer(content: string, run: RewardRun): string | null {
-  if (/(?:补丁|patch|diff|改了什么)/i.test(content)) {
-    return run.patch.available
-      ? `这是 Actor 的最终可交付补丁：\n\n\`\`\`diff\n${run.patch.preview}\n\`\`\``
-      : '这次运行没有形成可交付补丁。';
-  }
-  if (/(?:critic|hint|干预|介入|审阅)/i.test(content)) {
-    const hint = run.actor.latest_hint
-      ? `\n\n最后一条 fresh hint：\n\n> ${run.actor.latest_hint}`
-      : '\n\n本次没有产生需要注入 Actor 的 hint。';
-    return `Critic 共审阅 **${run.actor.turns_reviewed}** 个 pending action，介入 **${run.actor.interventions}** 次。${hint}`;
-  }
-  if (/(?:评分|grader|结果|成功|resolved)/i.test(content)) {
-    return run.grader.complete
-      ? `官方 Docker grader：**${run.grader.resolved}/1 resolved**，${run.grader.unresolved} unresolved，${run.grader.errors} error。`
-      : '官方 grader 尚未完成。';
-  }
-  if (/(?:解释|为什么|原理)/i.test(content)) {
-    return [
-      `这次修复围绕公开 issue **${run.task.task_id}** 展开。`,
-      '',
-      `RewardPack 先把目标行为编译为 ${run.rewardpack.probe_count} 个可执行验收 probe；Actor 在仓库中自然求解；Critic 只审阅尚未执行的 consequential action，并在正 advantage 时注入 fresh hint。最终补丁由官方 grader 独立验证为 **${run.grader.resolved}/1 resolved**。`,
-      '',
-      run.patch.available ? `最终 diff：\n\n\`\`\`diff\n${run.patch.preview}\n\`\`\`` : '本次没有最终 diff。',
-    ].join('\n');
-  }
-  if (/(?:详情|仪表盘|证据)/i.test(content)) {
-    return `[打开这次运行的独立实验仪表盘](/swarm-reward?run=${encodeURIComponent(run.run_id)})`;
-  }
-  return null;
 }
 
 export function useSwarmRewardChat(
@@ -162,8 +50,28 @@ export function useSwarmRewardChat(
 ): SwarmRewardChatController {
   const [tasks, setTasks] = useState<RewardTaskPreset[]>([]);
   const [recentRuns, setRecentRuns] = useState<RewardRun[]>([]);
+  const [selectedTask, setSelectedTask] = useState<RewardTaskPreset | null>(null);
   const [run, setRun] = useState<RewardRun | null>(null);
   const progressRef = useRef<Progress | null>(null);
+  const catalogPromiseRef = useRef<Promise<{
+    tasks: RewardTaskPreset[];
+    recentRuns: RewardRun[];
+  }> | null>(null);
+
+  const ensureCatalog = useCallback(async () => {
+    if (!catalogPromiseRef.current) {
+      catalogPromiseRef.current = Promise.all([loadRewardTasks(), loadRecentRuns()])
+        .then(([catalog, recent]) => ({ tasks: catalog.tasks, recentRuns: recent }))
+        .catch((reason) => {
+          catalogPromiseRef.current = null;
+          throw reason;
+        });
+    }
+    const catalog = await catalogPromiseRef.current;
+    setTasks(catalog.tasks);
+    setRecentRuns(catalog.recentRuns);
+    return catalog;
+  }, []);
 
   const addMessage = useCallback((role: 'user' | 'assistant' | 'system', content: string, mediaItems?: MediaItem[]) => {
     useChatStore.getState().addMessage(sessionId, {
@@ -236,6 +144,7 @@ export function useSwarmRewardChat(
   }, [addMessage, openStage, publishTerminal]);
 
   const replayRun = useCallback((next: RewardRun) => {
+    setSelectedTask(next.task);
     progressRef.current = {
       runId: next.run_id,
       activeStage: null,
@@ -270,22 +179,16 @@ export function useSwarmRewardChat(
         content: [
           '**Swarm Reward Coding Agent 已就绪。**',
           '',
-          '请在下方输入仓库任务，例如：',
+          '告诉我你想解决的仓库 issue，我会准备冻结工作区、构建 RewardPack，并启动 Actor-Critic。',
           '',
-          '- `演示 django__django-12325`：立即回放已冻结的真实成功运行；',
-          '- `请解决 django__django-12325`：在远端沙箱启动一次新的完整求解。',
+          '例如：`帮我解决 django__django-12325`。如果只想先看结果，可以说：`看看 12325 的演示运行`。',
           '',
           'Gold-assisted 仅用于 RewardPack Builder；Actor 与 Critic 不会看到 Gold patch。',
         ].join('\n'),
       });
     }
     let active = true;
-    void Promise.all([loadRewardTasks(), loadRecentRuns()])
-      .then(([catalog, recent]) => {
-        if (!active) return;
-        setTasks(catalog.tasks);
-        setRecentRuns(recent);
-      })
+    void ensureCatalog()
       .catch((reason) => {
         if (!active) return;
         addMessage('system', `Swarm Reward 执行服务未连接：${reason instanceof Error ? reason.message : String(reason)}`);
@@ -293,7 +196,7 @@ export function useSwarmRewardChat(
     return () => {
       active = false;
     };
-  }, [addMessage, enabled, sessionId]);
+  }, [addMessage, enabled, ensureCatalog, sessionId]);
 
   useEffect(() => {
     if (!enabled || !run || isTerminal(run)) return;
@@ -310,8 +213,8 @@ export function useSwarmRewardChat(
     return () => window.clearInterval(timer);
   }, [addMessage, enabled, publishRun, run]);
 
-  const beginRun = useCallback(async (task: RewardTaskPreset, content: string) => {
-    const mode = preferredMode(content, task);
+  const beginRun = useCallback(async (task: RewardTaskPreset, mode: PackMode) => {
+    setSelectedTask(task);
     useChatStore.getState().setProcessing(sessionId, true);
     useChatStore.getState().setThinking(sessionId, true);
     addMessage('assistant', `已接管 **${task.task_id}**。正在远端沙箱启动新的 ${mode === 'rebuild_gold_assisted' ? 'Gold-assisted' : 'Answer-blind'} 完整链路。`);
@@ -328,47 +231,125 @@ export function useSwarmRewardChat(
 
   const send = useCallback(async (content: string, mediaItems?: MediaItem[]) => {
     const trimmed = content.trim();
-    if (!enabled || !trimmed) return;
-    addMessage('user', trimmed, mediaItems);
+    if (!enabled || !trimmed) return false;
+    let handled = false;
+    let keepProcessing = Boolean(run && !isTerminal(run));
+    useChatStore.getState().setProcessing(sessionId, true);
+    useChatStore.getState().setThinking(sessionId, true);
 
-    const task = matchTask(trimmed, tasks) || run?.task || null;
-    if (wantsFreshRun(trimmed)) {
-      if (!task) {
-        addMessage('assistant', `我还不能确定任务。当前可用任务：${tasks.map((item) => `\`${item.task_id}\``).join('、') || '服务仍在载入'}。`);
-        return;
+    try {
+      let availableTasks = tasks;
+      let availableRuns = recentRuns;
+      if (availableTasks.length === 0) {
+        const catalog = await ensureCatalog();
+        availableTasks = catalog.tasks;
+        availableRuns = catalog.recentRuns;
       }
-      await beginRun(task, trimmed);
-      return;
-    }
 
-    if (!run && wantsReplay(trimmed)) {
-      if (!task) {
-        addMessage('assistant', '请同时给出要回放的 task id，例如 `演示 django__django-12325`。');
-        return;
-      }
-      const frozen = recentRuns.find((item) => item.task.task_id === task.task_id && item.status === 'completed');
-      if (!frozen) {
-        addMessage('assistant', `没有找到 **${task.task_id}** 的已完成运行。输入 \`请解决 ${task.task_id}\` 可以启动新运行。`);
-        return;
-      }
-      replayRun(await loadRewardRun(frozen.run_id));
-      return;
-    }
+      const route = await routeRewardMessage(trimmed, {
+        selected_task_id: run?.task.task_id || selectedTask?.task_id || null,
+        active_run: run ? {
+          run_id: run.run_id,
+          status: run.status,
+          phase: run.phase,
+        } : null,
+      });
+      if (route.scope === 'general') return false;
 
-    if (run) {
-      const answer = followupAnswer(trimmed, run);
-      if (answer) {
-        addMessage('assistant', answer);
-        return;
+      handled = true;
+      addMessage('user', trimmed, mediaItems);
+      const routedTask = availableTasks.find((item) => item.task_id === route.task_id) || null;
+      if (routedTask) setSelectedTask(routedTask);
+      const task = routedTask || run?.task || selectedTask;
+
+      if (route.intent === 'start_run') {
+        if (!task) {
+          addMessage('assistant', `我还不能确定任务。当前可用任务：${availableTasks.map((item) => `\`${item.task_id}\``).join('、')}。`);
+          return true;
+        }
+        if (run && !isTerminal(run)) {
+          addMessage('assistant', progressStatus(run));
+          return true;
+        }
+        const requestedMode = route.pack_mode;
+        const mode = requestedMode && task.available_pack_modes.includes(requestedMode)
+          ? requestedMode
+          : task.available_pack_modes.includes('rebuild_gold_assisted')
+            ? 'rebuild_gold_assisted'
+            : task.available_pack_modes[0] || 'rebuild_answer_blind';
+        keepProcessing = true;
+        await beginRun(task, mode);
+        return true;
+      }
+
+      if (route.intent === 'replay_run') {
+        if (!task) {
+          addMessage('assistant', '请告诉我想查看哪项任务的演示运行。');
+          return true;
+        }
+        const frozen = availableRuns.find((item) => item.task.task_id === task.task_id && item.status === 'completed');
+        if (!frozen) {
+          addMessage('assistant', `没有找到 **${task.task_id}** 的已完成运行。你可以直接让我开始解决它。`);
+          return true;
+        }
+        replayRun(await loadRewardRun(frozen.run_id));
+        return true;
+      }
+
+      if (route.intent === 'cancel') {
+        if (!run || isTerminal(run)) {
+          addMessage('assistant', '当前没有正在执行的 Demo 运行。');
+          return true;
+        }
+        const next = await cancelRewardRun(run.run_id);
+        setRun(next);
+        publishRun(next);
+        return true;
+      }
+
+      if (route.intent === 'task_context' && task) {
+        addMessage('assistant', [
+          `我已经载入 **${task.task_id}**（${task.repo_slug}）。`,
+          '',
+          `> ${task.issue}`,
+          '',
+          `当前会话会一直保留这个任务上下文。你可以直接让我开始，或者继续追问目标行为、RewardPack、Critic 和评分，不需要再重复 task id。`,
+        ].join('\n'));
+        return true;
+      }
+
+      const frozen = task
+        ? availableRuns.find((item) => item.task.task_id === task.task_id && item.status === 'completed')
+        : null;
+      const referenceRun = run || (frozen ? await loadRewardRun(frozen.run_id) : null);
+      if (referenceRun && route.intent) {
+        setRun(referenceRun);
+        setSelectedTask(referenceRun.task);
+        const answer = answerForIntent(route.intent, referenceRun);
+        if (answer) {
+          addMessage('assistant', answer);
+          return true;
+        }
+      }
+
+      addMessage('assistant', task
+        ? `**${task.task_id}** 还没有可供查询的运行。你可以让我现在开始。`
+        : `我还不能确定你指的是哪项 Demo 任务。当前可用任务：${availableTasks.map((item) => `\`${item.task_id}\``).join('、')}。`);
+      return true;
+    } catch (reason) {
+      if (!handled) {
+        console.warn('Swarm Reward semantic router unavailable; using normal Jiuwen agent.', reason);
+        return false;
+      }
+      addMessage('system', `Demo 执行服务尚未就绪：${reason instanceof Error ? reason.message : String(reason)}`);
+      return true;
+    } finally {
+      if (!keepProcessing) {
+        useChatStore.getState().setProcessing(sessionId, false);
+        useChatStore.getState().setThinking(sessionId, false);
       }
     }
-
-    if (task) {
-      addMessage('assistant', `已识别任务 **${task.task_id}**。输入 \`演示 ${task.task_id}\` 可立即查看真实冻结运行；输入 \`请解决 ${task.task_id}\` 会启动新的远端求解。`);
-      return;
-    }
-    addMessage('assistant', `请给出 task id。当前可用任务：${tasks.map((item) => `\`${item.task_id}\``).join('、') || '正在载入'}。`);
-  }, [addMessage, beginRun, enabled, recentRuns, replayRun, run, tasks]);
+  }, [addMessage, beginRun, enabled, ensureCatalog, publishRun, recentRuns, replayRun, run, selectedTask, sessionId, tasks]);
 
   const cancelRun = useCallback(async () => {
     if (!run || isTerminal(run)) return;
@@ -383,7 +364,7 @@ export function useSwarmRewardChat(
 
   return {
     enabled,
-    activeTaskId: run?.task.task_id || '',
+    activeTaskId: run?.task.task_id || selectedTask?.task_id || '',
     send,
     cancel: cancelRun,
   };

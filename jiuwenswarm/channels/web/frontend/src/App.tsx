@@ -1688,8 +1688,8 @@ function AppContent() {
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) return;
     if (isSwarmRewardMode) {
-      await swarmRewardChat.send(content, mediaItems);
-      return;
+      const handled = await swarmRewardChat.send(content, mediaItems);
+      if (handled) return;
     }
     if (currentSessionId === NEW_CONVERSATION_ID) {
       if (creatingSessionRef.current) return;
