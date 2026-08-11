@@ -308,6 +308,23 @@
   gap: 10px;
 }
 
+.swarm-reward__chat-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-action-primary);
+  color: var(--color-action-primary-text);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.swarm-reward__chat-link:hover {
+  background: var(--color-action-primary-hover);
+}
+
 .swarm-reward__live-status {
   gap: 7px;
   padding: 7px 10px;

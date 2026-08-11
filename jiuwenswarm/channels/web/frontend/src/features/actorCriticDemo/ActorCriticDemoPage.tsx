@@ -13,6 +13,7 @@ import {
   FolderGit2,
   Gauge,
   LoaderCircle,
+  MessageCircle,
   Play,
   RefreshCw,
   ShieldCheck,
@@ -101,12 +102,18 @@ export default function ActorCriticDemoPage() {
     async function bootstrap() {
       try {
         await checkRewardService();
-        const [catalog, recent] = await Promise.all([loadRewardTasks(), loadRecentRuns()]);
+        const requestedRunId = new URLSearchParams(window.location.search).get('run');
+        const [catalog, recent, requestedRun] = await Promise.all([
+          loadRewardTasks(),
+          loadRecentRuns(),
+          requestedRunId ? loadRewardRun(requestedRunId).catch(() => null) : Promise.resolve(null),
+        ]);
         if (!active) return;
         setTasks(catalog.tasks);
         setRuntime(catalog.runtime);
-        setSelectedTaskId(catalog.tasks[0]?.task_id || '');
-        setPackMode(preferredPackMode(catalog.tasks[0]));
+        setSelectedTaskId(requestedRun?.task.task_id || catalog.tasks[0]?.task_id || '');
+        setPackMode(requestedRun?.pack_mode || preferredPackMode(catalog.tasks[0]));
+        setRun(requestedRun);
         setRecentRuns(recent);
         setConnection('online');
       } catch (reason) {
@@ -273,6 +280,10 @@ export default function ActorCriticDemoPage() {
             <h1>自进化 Coding 工作台</h1>
           </div>
           <div className="swarm-reward__top-actions">
+            <a className="swarm-reward__chat-link" href="/chat/new?mode=swarm-reward">
+              <MessageCircle size={17} aria-hidden="true" />
+              打开对话 Agent
+            </a>
             <span className={`swarm-reward__live-status is-${connection}`}>
               <span />{connection === 'online' ? '真实执行环境已连接' : connection === 'checking' ? '正在连接' : '执行环境离线'}
             </span>

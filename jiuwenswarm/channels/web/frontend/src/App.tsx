@@ -24,6 +24,7 @@ import {
   type ShareImageSnapshot,
 } from './features/shareImageExport';
 import type { CodeReviewTarget } from './features/code-mode/types';
+import { useSwarmRewardChat } from './features/actorCriticDemo/useSwarmRewardChat';
 
 import { FEATURE_APP_UPDATER_UI } from './featureFlags';
 import {
@@ -281,11 +282,13 @@ function AppContent() {
   const { t, i18n } = useTranslation();
   const { route, navigate } = useChatRoute();
   const tRef = useRef(t);
+  const isSwarmRewardMode = new URLSearchParams(window.location.search).get('mode') === 'swarm-reward';
   // 优先使用存储的会话 ID，避免每次刷新创建新会话
   const [sessionId, setSessionId] = useState<string>(() => {
     if (route.kind === 'chat-session') return route.sessionId;
     return 'new';
   });
+  const swarmRewardChat = useSwarmRewardChat(isSwarmRewardMode, sessionId);
 
   const [activeNav, setActiveNav] = useState<MainNavKey>('chat');
   const [serverConfig, setServerConfig] = useState<Record<string, unknown> | null>(null);
@@ -1684,6 +1687,10 @@ function AppContent() {
   const handleSendMessage = useCallback(async (content: string, mediaItems?: MediaItem[]) => {
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) return;
+    if (isSwarmRewardMode) {
+      await swarmRewardChat.send(content, mediaItems);
+      return;
+    }
     if (currentSessionId === NEW_CONVERSATION_ID) {
       if (creatingSessionRef.current) return;
       creatingSessionRef.current = true;
@@ -1797,7 +1804,7 @@ function AppContent() {
     } else {
       useChatStore.getState().setInputValue(currentSessionId, content);
     }
-  }, [disposeInFlightHistoryHandles, mode, navigate, request, sendMessage, setGoalObjective, t]);
+  }, [disposeInFlightHistoryHandles, isSwarmRewardMode, mode, navigate, request, sendMessage, setGoalObjective, swarmRewardChat, t]);
 
   const handlePersistMedia = useCallback((content: string, mediaItems: MediaItem[]) => {
     const currentSessionId = sessionIdRef.current;
@@ -1827,14 +1834,22 @@ function AppContent() {
   }, [sendStructuredChatContent]);
 
   const handleInterrupt = useCallback((newInput?: string) => {
+    if (isSwarmRewardMode) {
+      if (newInput?.trim()) void swarmRewardChat.send(newInput);
+      return;
+    }
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId || currentSessionId === NEW_CONVERSATION_ID) return;
     const trimmed = newInput?.trim();
     if (!trimmed) return;
     void supplement(currentSessionId, trimmed);
-  }, [supplement]);
+  }, [isSwarmRewardMode, supplement, swarmRewardChat]);
 
   const handleCancel = useCallback(() => {
+    if (isSwarmRewardMode) {
+      void swarmRewardChat.cancel();
+      return;
+    }
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId || currentSessionId === NEW_CONVERSATION_ID) return;
     // 目标是否 active 决定停止按钮要不要顺带把目标转为 paused——约定行为：其它状态
@@ -1854,7 +1869,7 @@ function AppContent() {
     }
     void cancel(currentSessionId);
     if (isGoalActive) void pauseGoal(currentSessionId);
-  }, [cancel, mode, pause, pauseGoal]);
+  }, [cancel, isSwarmRewardMode, mode, pause, pauseGoal, swarmRewardChat]);
 
   /**
    * 删除目标：active 时除了清目标，还要顺带结束当前会话输出——复用停止按钮同一套中断调用
@@ -2349,8 +2364,8 @@ function AppContent() {
                       onExportShare={handleExportShare}
                       isExportingShare={isExportingShare}
                       canExportShare={Boolean(sessionId && sessionId !== NEW_CONVERSATION_ID && (!isProcessing || isPaused))}
-                      sessionTitle={sessionTitle}
-                      sessionProjectName={sessionProjectName}
+                      sessionTitle={isSwarmRewardMode ? 'Swarm Reward Coding Agent' : sessionTitle}
+                      sessionProjectName={isSwarmRewardMode ? (swarmRewardChat.activeTaskId || '远端 SWE 工作区') : sessionProjectName}
                       sessionProject={sessionProject}
                       teamAreaExpanded={isTeamAreaExpanded}
                       autoFocusKey={composerFocusKey}
