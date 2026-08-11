@@ -31,6 +31,8 @@ const EMPTY_REASONING: ReasoningSegment[] = [];
 
 interface MessageListProps {
   messages: Message[];
+  /** Keep a completed turn visible by default while still allowing manual collapse. */
+  defaultCompletedWorkExpanded?: boolean;
   renderAfterMessage?: (message: Message) => ReactNode;
 }
 
@@ -44,6 +46,8 @@ interface ChatTimelineListProps {
    */
   staticTimeline?: boolean;
   mode?: string;
+  /** Keep a completed turn visible by default while still allowing manual collapse. */
+  defaultCompletedWorkExpanded?: boolean;
   disableA2UIInteraction?: boolean;
   renderAfterMessage?: (message: Message) => ReactNode;
 }
@@ -320,6 +324,7 @@ export function ChatTimelineList({
   reasoningSegments: reasoningSegmentsProp,
   staticTimeline = false,
   mode = 'default',
+  defaultCompletedWorkExpanded = false,
   disableA2UIInteraction = false,
   renderAfterMessage,
 }: ChatTimelineListProps) {
@@ -439,7 +444,10 @@ export function ChatTimelineList({
   }
 
   const toggleTurn = (turnId: number) => {
-    setExpandedTurns((prev) => ({ ...prev, [turnId]: !prev[turnId] }));
+    setExpandedTurns((prev) => ({
+      ...prev,
+      [turnId]: !(prev[turnId] ?? defaultCompletedWorkExpanded),
+    }));
   };
 
   const toggleStreak = (streakId: string) => {
@@ -452,7 +460,7 @@ export function ChatTimelineList({
         if (item.type === 'message') {
           const meta = item.turnId >= 0 ? turnWorkMeta.get(item.turnId) : undefined;
           const turnFoldable = Boolean(meta?.completed && meta.hasWork && item.hideMeta);
-          const turnOpen = !turnFoldable || Boolean(expandedTurns[item.turnId]);
+          const turnOpen = !turnFoldable || (expandedTurns[item.turnId] ?? defaultCompletedWorkExpanded);
           const isFoldAnchor = turnFoldAnchorKeys.get(item.turnId) === item.key;
 
           if (turnFoldable) {
@@ -517,7 +525,7 @@ export function ChatTimelineList({
         if (item.type === 'reasoning' || item.type === 'toolGroup') {
           const meta = turnWorkMeta.get(item.turnId);
           const turnFoldable = Boolean(meta?.completed && meta.hasWork);
-          const turnOpen = !turnFoldable || Boolean(expandedTurns[item.turnId]);
+          const turnOpen = !turnFoldable || (expandedTurns[item.turnId] ?? defaultCompletedWorkExpanded);
           const streak = liveStreakByItemKey.get(item.key);
           const streakOpen = !streak || Boolean(expandedStreaks[streak.id]);
           const contentOpen = turnOpen && streakOpen;
@@ -658,7 +666,11 @@ export function ChatTimelineList({
   );
 }
 
-export function MessageList({ messages, renderAfterMessage }: MessageListProps) {
+export function MessageList({
+  messages,
+  defaultCompletedWorkExpanded = false,
+  renderAfterMessage,
+}: MessageListProps) {
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const toolExecutions = useChatStore((s) => s.runtimes[activeSessionId ?? '']?.toolExecutions ?? new Map());
   const toolExecutionOrder = useChatStore((s) => s.runtimes[activeSessionId ?? '']?.toolExecutionOrder ?? []);
@@ -675,6 +687,7 @@ export function MessageList({ messages, renderAfterMessage }: MessageListProps) 
       messages={messages}
       executions={executions}
       mode={mode}
+      defaultCompletedWorkExpanded={defaultCompletedWorkExpanded}
       renderAfterMessage={renderAfterMessage}
     />
   );

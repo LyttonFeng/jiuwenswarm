@@ -283,12 +283,15 @@ function AppContent() {
   const { route, navigate } = useChatRoute();
   const tRef = useRef(t);
   const isSwarmRewardMode = new URLSearchParams(window.location.search).get('mode') === 'swarm-reward';
+  const swarmRewardInitialRunId = isSwarmRewardMode
+    ? new URLSearchParams(window.location.search).get('run')
+    : null;
   // 优先使用存储的会话 ID，避免每次刷新创建新会话
   const [sessionId, setSessionId] = useState<string>(() => {
     if (route.kind === 'chat-session') return route.sessionId;
     return 'new';
   });
-  const swarmRewardChat = useSwarmRewardChat(isSwarmRewardMode, sessionId);
+  const swarmRewardChat = useSwarmRewardChat(isSwarmRewardMode, sessionId, swarmRewardInitialRunId);
 
   const [activeNav, setActiveNav] = useState<MainNavKey>('chat');
   const [serverConfig, setServerConfig] = useState<Record<string, unknown> | null>(null);
@@ -2360,6 +2363,7 @@ function AppContent() {
                       onCancel={handleCancel}
                       onSwitchMode={handleSwitchMode}
                       fixedModeLabel={isSwarmRewardMode ? 'Swarm Reward 模式' : undefined}
+                      defaultCompletedWorkExpanded={isSwarmRewardMode}
                       isProcessing={isProcessing}
                       onUserAnswer={handleUserAnswer}
                       onExportShare={handleExportShare}

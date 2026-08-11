@@ -55,12 +55,14 @@ function timestamp(): string {
 export function useSwarmRewardChat(
   enabled: boolean,
   sessionId: string,
+  initialRunId: string | null = null,
 ): SwarmRewardChatController {
   const [tasks, setTasks] = useState<RewardTaskPreset[]>([]);
   const [recentRuns, setRecentRuns] = useState<RewardRun[]>([]);
   const [selectedTask, setSelectedTask] = useState<RewardTaskPreset | null>(null);
   const [run, setRun] = useState<RewardRun | null>(null);
   const progressRef = useRef<Progress | null>(null);
+  const replayedRunRef = useRef<string | null>(null);
   const catalogPromiseRef = useRef<Promise<{
     tasks: RewardTaskPreset[];
     recentRuns: RewardRun[];
@@ -242,6 +244,17 @@ export function useSwarmRewardChat(
       active = false;
     };
   }, [addMessage, enabled, ensureCatalog, sessionId]);
+
+  useEffect(() => {
+    if (!enabled || !initialRunId || replayedRunRef.current === initialRunId) return;
+    replayedRunRef.current = initialRunId;
+    void loadRewardRun(initialRunId)
+      .then(replayRun)
+      .catch((reason) => {
+        replayedRunRef.current = null;
+        addMessage('system', `无法回放运行 ${initialRunId}：${reason instanceof Error ? reason.message : String(reason)}`);
+      });
+  }, [addMessage, enabled, initialRunId, replayRun]);
 
   useEffect(() => {
     if (!enabled || !run || isTerminal(run)) return;

@@ -81,6 +81,8 @@ interface ChatPanelProps {
   onSwitchMode: (mode: AgentMode) => void;
   /** 用于外部编排器提供固定的运行模式标识；提供后隐藏普通 Agent/Team 切换菜单。 */
   fixedModeLabel?: string;
+  /** 完成后默认保留工作轨迹；用户仍可手动收起。 */
+  defaultCompletedWorkExpanded?: boolean;
   isProcessing: boolean;
   onUserAnswer: (requestId: string, answers: UserAnswer[], source?: string) => void;
   onExportShare?: () => void | Promise<void>;
@@ -725,6 +727,7 @@ export function ChatPanel({
   onCancel,
   onSwitchMode,
   fixedModeLabel,
+  defaultCompletedWorkExpanded = false,
   isProcessing,
   onUserAnswer,
   onExportShare,
@@ -1316,7 +1319,11 @@ export function ChatPanel({
               )}
               {hasTimelineContent ? (
                 <>
-                  <MessageList messages={messages} renderAfterMessage={renderCodeChangesAfterMessage} />
+                  <MessageList
+                    messages={messages}
+                    defaultCompletedWorkExpanded={defaultCompletedWorkExpanded}
+                    renderAfterMessage={renderCodeChangesAfterMessage}
+                  />
                   {shouldShowHumanShare && (
                     <HumanShareCard
                       commands={teamHumanShareCommands}

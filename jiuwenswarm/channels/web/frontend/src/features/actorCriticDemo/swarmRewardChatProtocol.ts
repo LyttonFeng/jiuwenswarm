@@ -67,15 +67,19 @@ export function finalSummary(run: RewardRun): string {
   const packBoundary = run.pack_mode === 'rebuild_gold_assisted'
     ? 'Builder 使用 Gold；Actor 与 Critic 未看到 Gold。'
     : 'RewardPack、Actor 与 Critic 均未使用 Gold。';
+  const reviewedTurns = run.timeline.filter((event) => event.kind === 'actor_critic_turn').length;
   return [
     `任务 **${run.task.task_id}** 已结束，官方结果为 ${verdict}。`,
     '',
     `- RewardPack：${run.rewardpack.passed}/${run.rewardpack.probe_count} probes`,
     `- Actor：${run.actor.tool_calls} 次工具调用`,
     `- Critic：${run.actor.turns_reviewed} 次审阅，${run.actor.interventions} 次介入`,
+    `- 已保存轨迹：${reviewedTurns} 个 Actor-Critic turn，可逐轮展开`,
     `- 实验边界：${packBoundary}`,
     '',
     `你可以继续问：**解释改动**、**查看补丁**、**Critic 为什么介入**、**查看评分**，或让我重新运行。`,
+    '',
+    `[在对话中回放 Actor-Critic 轨迹](/chat/new?mode=swarm-reward&run=${encodeURIComponent(run.run_id)})`,
     '',
     `[打开独立实验仪表盘](/swarm-reward?run=${encodeURIComponent(run.run_id)})`,
   ].join('\n');
@@ -203,6 +207,57 @@ export function progressStatus(run: RewardRun): string {
   ].join('\n');
 }
 
+function actorCriticExplanation(run: RewardRun): string {
+  const reviewed = run.timeline.filter((event) => event.kind === 'actor_critic_turn');
+  const valued = reviewed.filter((event) => event.metrics?.state_value != null);
+  const interventions = reviewed.filter((event) => event.decision === 'speak');
+  const valueRows = valued.map((event) => {
+    const metrics = event.metrics!;
+    const turn = event.title.match(/Turn (\d+)/)?.[1] || '?';
+    const number = (value: number | null) => value === null ? '—' : value.toFixed(3);
+    return `| ${turn} | ${number(metrics.state_value)} | ${number(metrics.actor_q)} | ${number(metrics.actor_advantage)} | ${number(metrics.revision_q)} | ${number(metrics.predicted_hint_gain)} | ${event.decision || 'silent'} |`;
+  }).join('\n');
+  const boundary = run.rewardpack.boundary.teacher_gold_access
+    ? 'Builder 可见 Gold；冻结后 Actor 与 Critic 不可见 Gold；未使用 hidden tests。'
+    : 'Builder、Actor 与 Critic 均 answer-blind；未使用 hidden tests。';
+  const grader = run.grader.complete
+    ? `${run.grader.resolved}/1 resolved，${run.grader.unresolved} unresolved，${run.grader.errors} error`
+    : '尚未完成';
+
+  return [
+    `## RewardPack-guided online Actor-Critic · ${run.task.task_id}`,
+    '',
+    '**这不是经典 one-step Actor-Critic，也不是在线训练模型参数。** 它是在 coding inference 期间、工具执行之前运行的动作控制回路；RewardPack 是冻结的任务奖励合同，不使用 embedding memory。',
+    '',
+    '### 一轮控制逻辑',
+    '',
+    '1. Actor 从当前状态 \(s_t\) 产生一个**尚未执行**的真实工具动作 \(a_t\)。状态只包含公开 issue、冻结 RewardPack、当前 worktree 与已经执行的可见证据。',
+    '2. 只读低风险动作可由语义 Router 快速放行；需要审阅的动作交给 Proposer 产生一个 grounded revision \(\\tilde a_t\)。',
+    '3. 独立 Value Critic 从同一个 \(s_t\) 评价：\(V(s_t)\)、\(Q(s_t,a_t)\) 与 \(Q(s_t,\\tilde a_t)\)。候选顺序被盲化，Critic 不知道哪一个来自 Actor。',
+    '4. Controller 确定性计算 \(A_{actor}=Q(s_t,a_t)-V(s_t)\) 和 predicted hint gain \(\\Delta_t=Q(s_t,\\tilde a_t)-Q(s_t,a_t)\)。revision 还必须可执行、repo-grounded，并与 RewardPack 要求的条件和边界相容。',
+    '5. 若合同有效且 \(\\Delta_t\) 超过阈值，Controller **speak**：丢弃原 pending action，只注入当前 fresh hint，让同一 Actor 重新采样；否则 **silent**：原动作不变地执行。',
+    '6. 工具结果成为 \(s_{t+1}\) 的新证据。模型 reasoning 在本次调用后丢弃，不进入 Actor 历史、RewardPack 或网页。',
+    '',
+    '### 本次真实运行',
+    '',
+    `- RewardPack：${run.rewardpack.passed}/${run.rewardpack.probe_count} 条 sandbox-certified probes`,
+    `- Actor：${run.actor.tool_calls} 次工具调用`,
+    `- Critic：${reviewed.length} 次动作决策；${interventions.length} 次 speak（${interventions.map((event) => event.title.match(/Turn (\d+)/)?.[1]).filter(Boolean).map((turn) => `Turn ${turn}`).join('、') || '无'}）`,
+    `- 官方 grader：${grader}`,
+    `- 实验边界：${boundary}`,
+    '',
+    ...(valueRows ? [
+      '### 有完整价值估计的回合',
+      '',
+      '| Turn | V(s) | Q(actor) | A(actor) | Q(revision) | hint gain | decision |',
+      '|---:|---:|---:|---:|---:|---:|:---|',
+      valueRows,
+      '',
+    ] : []),
+    '页面中的已保存轨迹可以逐轮展开，查看 pending action、speak/silent、fresh hint 与执行证据。',
+  ].join('\n');
+}
+
 export function answerForIntent(intent: RewardChatIntent, run: RewardRun): string | null {
   if (intent === 'rewardpack_status') return rewardPackStatus(run);
   if (intent === 'rewardpack_content') return rewardPackContent(run);
@@ -225,13 +280,7 @@ export function answerForIntent(intent: RewardChatIntent, run: RewardRun): strin
       : '官方 grader 尚未完成。';
   }
   if (intent === 'explain') {
-    return [
-      `这次修复围绕公开 issue **${run.task.task_id}** 展开。`,
-      '',
-      `RewardPack 先把目标行为编译为 ${run.rewardpack.probe_count} 个可执行验收 probe；Actor 在仓库中自然求解；Critic 只审阅尚未执行的 consequential action，并在正 advantage 时注入 fresh hint。最终补丁由官方 grader 独立验证为 **${run.grader.resolved}/1 resolved**。`,
-      '',
-      run.patch.available ? `最终 diff：\n\n\`\`\`diff\n${run.patch.preview}\n\`\`\`` : '本次没有最终 diff。',
-    ].join('\n');
+    return actorCriticExplanation(run);
   }
   if (intent === 'dashboard') {
     return `[打开这次运行的独立实验仪表盘](/swarm-reward?run=${encodeURIComponent(run.run_id)})`;
