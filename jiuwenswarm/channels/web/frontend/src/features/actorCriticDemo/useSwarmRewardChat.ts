@@ -23,6 +23,7 @@ import {
   isTerminal,
   progressStatus,
   rewardPackContent,
+  rewardPackStatus,
   stageResult,
   type Stage,
 } from './swarmRewardChatProtocol';
@@ -428,7 +429,7 @@ export function useSwarmRewardChat(
 
       if (route.intent === 'rewardpack_status' && task) {
         if (run && !isTerminal(run)) {
-          addMessage('assistant', rewardPackContent(run));
+          addMessage('assistant', rewardPackStatus(run));
           return true;
         }
         let source = [run, ...availableRuns].find((item) =>
@@ -447,9 +448,7 @@ export function useSwarmRewardChat(
           addMessage('assistant', `**${task.task_id}** 还没有通过认证的 RewardPack。你可以让我现在构建。`);
           return true;
         }
-        addMessage('assistant', rewardPackContent(source));
-        keepProcessing = true;
-        await beginFromPack(task, source);
+        addMessage('assistant', rewardPackStatus(source));
         return true;
       }
 

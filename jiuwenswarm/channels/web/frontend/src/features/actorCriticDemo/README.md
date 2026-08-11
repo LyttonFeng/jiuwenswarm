@@ -14,6 +14,8 @@ Each turn first passes through a small, non-reasoning semantic router:
 - Demo control/status intent stays in the Swarm Reward controller. The model only
   classifies the turn; deterministic code owns process start, cancellation, and
   evidence projection.
+- Query intents are side-effect free. Only explicit start, build, and cancel
+  intents may change remote execution state.
 - Everything else falls through unchanged to JiuwenSwarm's normal Agent path.
 
 The Demo controller supports composable execution semantics without command syntax:
@@ -24,8 +26,8 @@ The Demo controller supports composable execution semantics without command synt
 - `构建 <task-id> 的 RewardPack` runs Builder and sandbox admission only. The chat
   shows each completed Builder round, then renders Goal, Solution, criteria, and
   admitted probes from the frozen Pack.
-- `RewardPack 构建好了吗？` answers from the latest certified Pack and immediately
-  starts Actor-Critic from a content-hash-verified copy. Builder is skipped.
+- `RewardPack 构建好了吗？` only reports the latest certified Pack. `构建好了就跑`
+  explicitly starts Actor-Critic from a content-hash-verified copy; Builder is skipped.
 
 If `请解决` is sent when a certified Pack already exists, the same reuse path is
 used. The browser never chooses a server path or trusts a client-supplied Pack ID;

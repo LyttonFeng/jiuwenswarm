@@ -83,10 +83,7 @@ export function finalSummary(run: RewardRun): string {
 
 export function rewardPackStatus(run: RewardRun): string {
   if (run.rewardpack.verified) {
-    const phase = run.phase === 'complete'
-      ? '已完成'
-      : STAGES.includes(run.phase as Stage) ? STAGE_LABELS[run.phase as Stage] : '任务排队';
-    return `RewardPack 已构建并通过沙箱认证：**${run.rewardpack.passed}/${run.rewardpack.probe_count} probes**。当前链路状态：**${phase}**。`;
+    return `RewardPack 已构建、通过沙箱认证并冻结：**${run.rewardpack.passed}/${run.rewardpack.probe_count} probes**。它可以复用于 Actor-Critic；本次状态查询没有启动新的运行。`;
   }
   if (run.phase === 'rewardpack') return `RewardPack 正在构建和沙箱认证，当前状态：${run.message}`;
   if (run.phase === 'queued' || run.phase === 'workspace') {
