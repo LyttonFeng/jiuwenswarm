@@ -149,4 +149,5 @@ export interface RewardChatRoute {
   intent: RewardChatIntent | null;
   task_id: string | null;
   pack_mode: PackMode | null;
+  answer: string | null;
 }

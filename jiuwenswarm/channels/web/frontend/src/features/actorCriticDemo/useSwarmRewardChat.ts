@@ -430,12 +430,10 @@ export function useSwarmRewardChat(
       }
 
       if (route.intent === 'task_context' && task) {
-        addMessage('assistant', [
-          `我已经载入 **${task.task_id}**（${task.repo_slug}）。`,
+        addMessage('assistant', route.answer?.trim() || [
+          `**${task.task_id}**（${task.repo_slug}）`,
           '',
-          `> ${task.issue}`,
-          '',
-          `当前会话会一直保留这个任务上下文。你可以直接让我开始，或者继续追问目标行为、RewardPack、Critic 和评分，不需要再重复 task id。`,
+          task.issue,
         ].join('\n'));
         return true;
       }

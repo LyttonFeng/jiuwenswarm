@@ -10,7 +10,7 @@ import type {
 const API_BASE = (
   import.meta.env.VITE_SWARM_REWARD_API_BASE || 'http://127.0.0.1:8765'
 ).replace(/\/$/, '');
-const EXPECTED_PROTOCOL_VERSION = 'swarm_reward.web_chat.v4';
+const EXPECTED_PROTOCOL_VERSION = 'swarm_reward.web_chat.v5';
 
 function assertProtocol(version: string): void {
   if (version !== EXPECTED_PROTOCOL_VERSION) {
