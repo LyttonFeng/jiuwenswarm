@@ -77,6 +77,33 @@ export function rewardPackStatus(run: RewardRun): string {
   return `RewardPack 尚未通过认证。当前运行状态为 **${run.status}**：${run.message}`;
 }
 
+export function sandboxStatus(run: RewardRun): string {
+  if (run.phase === 'queued') {
+    return `**${run.task.task_id}** 的远端沙箱尚未开始准备。当前状态：${run.message}`;
+  }
+  if (run.phase === 'workspace' && !isTerminal(run)) {
+    return `**${run.task.task_id}** 的远端沙箱正在搭建和冻结。当前状态：${run.message}`;
+  }
+  if (isTerminal(run) && !run.rewardpack.verified && !run.actor.started) {
+    return `**${run.task.task_id}** 的本次沙箱准备没有完成。运行状态：${run.status}；${run.message}`;
+  }
+  const verification = run.grader.complete
+    ? `官方 Docker grader 已在该环境完成执行：${run.grader.resolved} resolved，${run.grader.unresolved} unresolved，${run.grader.errors} error。`
+    : run.rewardpack.verified
+      ? `RewardPack 的 ${run.rewardpack.passed}/${run.rewardpack.probe_count} 条 probe 已在该环境通过沙箱认证。`
+      : '冻结工作区已经进入后续执行阶段。';
+  return [
+    `**${run.task.task_id} 的远端沙箱已经搭建并验证可用。**`,
+    '',
+    `- 仓库：${run.task.repo_slug}`,
+    `- 冻结基线：\`${run.task.base_commit}\``,
+    `- 运行隔离：远端 Docker 沙箱`,
+    `- 验证证据：${verification}`,
+    '',
+    '这次只是查询状态，没有启动新的 Builder 或 Actor-Critic 运行。',
+  ].join('\n');
+}
+
 const ROLE_LABELS: Record<string, string> = {
   terminal: 'Goal',
   constraint: 'Preservation',
@@ -128,6 +155,7 @@ export function progressStatus(run: RewardRun): string {
 export function answerForIntent(intent: RewardChatIntent, run: RewardRun): string | null {
   if (intent === 'rewardpack_status') return rewardPackStatus(run);
   if (intent === 'rewardpack_content') return rewardPackContent(run);
+  if (intent === 'sandbox_status') return sandboxStatus(run);
   if (intent === 'progress') return progressStatus(run);
   if (intent === 'patch') {
     return run.patch.available

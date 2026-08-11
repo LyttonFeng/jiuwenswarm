@@ -121,6 +121,7 @@ export type RewardChatIntent =
   | 'replay_run'
   | 'rewardpack_status'
   | 'rewardpack_content'
+  | 'sandbox_status'
   | 'progress'
   | 'patch'
   | 'critic'
