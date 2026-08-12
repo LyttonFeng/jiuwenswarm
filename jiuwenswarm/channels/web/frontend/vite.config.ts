@@ -1008,6 +1008,7 @@ function portFromEnv(name: string, fallback: number): number {
 const frontendPort = portFromEnv('FRONTEND_PORT', 5173)
 const webPort = portFromEnv('WEB_PORT', 19000)
 const webTarget = `http://127.0.0.1:${webPort}`
+const swarmRewardTarget = process.env.SWARM_REWARD_TARGET || 'http://127.0.0.1:18878'
 
 export default defineConfig({
   plugins: [suppressWsProxySocketErrors(), devWsTrafficLogger(), devFileContentApi(), react(), svgr()],
@@ -1023,6 +1024,11 @@ export default defineConfig({
     port: frontendPort,
     strictPort: true,
     proxy: {
+      '/swarm-reward-api': {
+        target: swarmRewardTarget,
+        changeOrigin: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/swarm-reward-api/, ''),
+      },
       '/api': {
         target: webTarget,
         changeOrigin: true,

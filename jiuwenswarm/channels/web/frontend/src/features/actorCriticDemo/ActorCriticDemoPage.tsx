@@ -448,18 +448,54 @@ export default function ActorCriticDemoPage() {
               </div>
 
               {showTechnical && run ? (
-                <section className="swarm-reward__technical">
-                  <div className="swarm-reward__technical-head">
-                    <div>
-                      <span><FileCode2 size={17} />真实工作树补丁</span>
-                      <small>{run.patch.available ? `${run.patch.bytes || run.patch.preview.length} bytes` : '尚未产生 patch'}</small>
+                <div className="swarm-reward__technical-stack">
+                  <section className="swarm-reward__technical">
+                    <div className="swarm-reward__technical-head">
+                      <div>
+                        <span><Bot size={17} />Actor-Critic 完整历史</span>
+                        <small>{run.timeline.length} 条已保存事件；点击任一回合展开</small>
+                      </div>
+                      <span className="swarm-reward__verdict">
+                        {run.actor.turns_reviewed} reviews · {run.actor.interventions} speak
+                      </span>
                     </div>
-                    <span className={`swarm-reward__verdict ${resolved ? 'is-resolved' : ''}`}>
-                      {run.grader.complete ? `${run.grader.resolved}/1 resolved` : 'grader pending'}
-                    </span>
-                  </div>
-                  <pre>{run.patch.preview || 'Actor 尚未形成可交付补丁。'}</pre>
-                </section>
+                    <div className="swarm-reward__history">
+                      {run.timeline.map((event) => (
+                        <details
+                          className={`swarm-reward__history-event is-${event.decision || event.stage}`}
+                          key={event.id}
+                          open={event.decision === 'speak'}
+                        >
+                          <summary>
+                            <span>{event.title}</span>
+                            <b>{event.decision || event.status}</b>
+                          </summary>
+                          <pre>{event.detail}</pre>
+                          {event.metrics ? (
+                            <div className="swarm-reward__history-metrics">
+                              <Metric label="V(s)" value={formatMetric(event.metrics.state_value)} />
+                              <Metric label="Q(actor)" value={formatMetric(event.metrics.actor_q)} />
+                              <Metric label="Q(revision)" value={formatMetric(event.metrics.revision_q)} />
+                              <Metric label="Intervention gain" value={formatMetric(event.metrics.intervention_gain)} />
+                            </div>
+                          ) : null}
+                        </details>
+                      ))}
+                    </div>
+                  </section>
+                  <section className="swarm-reward__technical">
+                    <div className="swarm-reward__technical-head">
+                      <div>
+                        <span><FileCode2 size={17} />真实工作树补丁</span>
+                        <small>{run.patch.available ? `${run.patch.bytes || run.patch.preview.length} bytes` : '尚未产生 patch'}</small>
+                      </div>
+                      <span className={`swarm-reward__verdict ${resolved ? 'is-resolved' : ''}`}>
+                        {run.grader.complete ? `${run.grader.resolved}/1 resolved` : 'grader pending'}
+                      </span>
+                    </div>
+                    <pre>{run.patch.preview || 'Actor 尚未形成可交付补丁。'}</pre>
+                  </section>
+                </div>
               ) : null}
             </>
           )}
@@ -496,4 +532,8 @@ function Metric({ label, value, positive = false }: { label: string; value: stri
       <span>{label}</span><b>{value}</b>
     </div>
   );
+}
+
+function formatMetric(value: number | null): string {
+  return value === null ? '—' : value.toFixed(3);
 }

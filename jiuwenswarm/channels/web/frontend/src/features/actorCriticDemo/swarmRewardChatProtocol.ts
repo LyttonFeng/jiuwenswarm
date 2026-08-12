@@ -254,7 +254,7 @@ function actorCriticExplanation(run: RewardRun): string {
     const metrics = event.metrics!;
     const turn = event.title.match(/Turn (\d+)/)?.[1] || '?';
     const number = (value: number | null) => value === null ? '—' : value.toFixed(3);
-    return `| ${turn} | ${number(metrics.state_value)} | ${number(metrics.actor_q)} | ${number(metrics.actor_advantage)} | ${number(metrics.revision_q)} | ${number(metrics.predicted_hint_gain)} | ${event.decision || 'silent'} |`;
+    return `| ${turn} | ${number(metrics.state_value)} | ${number(metrics.actor_q)} | ${number(metrics.revision_q)} | ${number(metrics.intervention_gain)} | ${event.decision || 'silent'} |`;
   }).join('\n');
   const boundary = run.rewardpack.boundary.teacher_gold_access
     ? 'Builder 可见 Gold；冻结后 Actor 与 Critic 不可见 Gold；未使用 hidden tests。'
@@ -273,8 +273,8 @@ function actorCriticExplanation(run: RewardRun): string {
     '1. Actor 从当前状态 $s_t$ 产生一个**尚未执行**的真实工具动作 $a_t$。状态只包含公开 issue、冻结 RewardPack、当前 worktree 与已经执行的可见证据。',
     '2. 只读低风险动作可由语义 Router 快速放行；需要审阅的动作交给 Proposer 产生一个 grounded revision $\\tilde a_t$。',
     '3. 独立 Value Critic 从同一个 $s_t$ 评价：$V(s_t)$、$Q(s_t,a_t)$ 与 $Q(s_t,\\tilde a_t)$。候选顺序被盲化，Critic 不知道哪一个来自 Actor。',
-    '4. Controller 确定性计算 $A_{actor}=Q(s_t,a_t)-V(s_t)$ 和 predicted hint gain $\\Delta_t=Q(s_t,\\tilde a_t)-Q(s_t,a_t)$。revision 还必须可执行、repo-grounded，并与 RewardPack 要求的条件和边界相容。',
-    '5. 若合同有效且 $\\Delta_t$ 超过阈值，Controller **speak**：丢弃原 pending action，只注入当前 fresh hint，让同一 Actor 重新采样；否则 **silent**：原动作不变地执行。',
+    '4. Controller 不计算单动作 advantage；它只比较同一状态下两个候选的成本调整效用：$G_t=U(s_t,\\tilde a_t)-U(s_t,a_t)$。revision 还必须可执行、repo-grounded，并与 RewardPack 要求的条件和边界相容。',
+    '5. 若合同有效且干预收益 $G_t$ 超过阈值，Controller **speak**：丢弃原 pending action，只注入当前 fresh hint，让同一 Actor 重新采样；否则 **silent**：原动作不变地执行。',
     '6. 工具结果成为 $s_{t+1}$ 的新证据。模型 reasoning 在本次调用后丢弃，不进入 Actor 历史、RewardPack 或网页。',
     '',
     '### 本次真实运行',
@@ -288,8 +288,8 @@ function actorCriticExplanation(run: RewardRun): string {
     ...(valueRows ? [
       '### 有完整价值估计的回合',
       '',
-      '| Turn | V(s) | Q(actor) | A(actor) | Q(revision) | hint gain | decision |',
-      '|---:|---:|---:|---:|---:|---:|:---|',
+      '| Turn | V(s) | Q(actor) | Q(revision) | intervention gain | decision |',
+      '|---:|---:|---:|---:|---:|:---|',
       valueRows,
       '',
     ] : []),

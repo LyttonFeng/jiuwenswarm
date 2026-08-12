@@ -71,9 +71,8 @@ export interface RewardTimelineEvent {
   metrics?: {
     state_value: number | null;
     actor_q: number | null;
-    actor_advantage: number | null;
     revision_q: number | null;
-    predicted_hint_gain: number | null;
+    intervention_gain: number | null;
     revision_relation: string;
     confidence: number | null;
     criterion_scores: Array<{ criterion_id: string; score: number | null; constraint_status: string }>;
