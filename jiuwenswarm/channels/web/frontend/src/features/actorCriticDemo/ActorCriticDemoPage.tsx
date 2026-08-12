@@ -399,7 +399,7 @@ export default function ActorCriticDemoPage() {
                       icon={Bot}
                       title="Jiuwen Actor"
                       state={run?.actor.completed ? 'done' : run?.actor.started ? 'running' : 'waiting'}
-                      detail={run?.actor.started ? `${run.actor.tool_calls} 次工具调用；${run.actor.turns_reviewed} 个 pending action 已审阅` : '等待 Actor 在真实 Repo 中读代码、编辑并测试'}
+                      detail={run?.actor.started ? `${run.actor.tool_calls} 次工具调用；${run.actor.turns_reviewed} 个 pending action 已审阅${run.actor.critic_errors ? `；${run.actor.critic_errors} 次 Critic 异常` : ''}` : '等待 Actor 在真实 Repo 中读代码、编辑并测试'}
                     />
                     {run?.actor.latest_hint ? (
                       <div className="swarm-reward__critic-card">
@@ -456,7 +456,7 @@ export default function ActorCriticDemoPage() {
                         <small>{run.timeline.length} 条已保存事件；点击任一回合展开</small>
                       </div>
                       <span className="swarm-reward__verdict">
-                        {run.actor.turns_reviewed} reviews · {run.actor.interventions} speak
+                        {run.actor.turns_reviewed} reviews · {run.actor.interventions} speak{run.actor.critic_errors ? ` · ${run.actor.critic_errors} error` : ''}
                       </span>
                     </div>
                     <div className="swarm-reward__history">

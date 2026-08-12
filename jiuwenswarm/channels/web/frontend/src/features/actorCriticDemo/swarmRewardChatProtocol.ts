@@ -36,6 +36,9 @@ export function stageResult(run: RewardRun, stage: Stage): string {
       : 'RewardPack 未通过认证。';
   }
   if (stage === 'actor') {
+    if (run.actor.critic_errors > 0) {
+      return `Actor-Critic 因 Critic 不可用而停止；${run.actor.critic_errors} 次异常未计入 silent 或有效审阅。`;
+    }
     return `Actor 完成 ${run.actor.tool_calls} 次工具调用；Critic 审阅 ${run.actor.turns_reviewed} 次，介入 ${run.actor.interventions} 次。`;
   }
   return run.grader.complete
@@ -92,10 +95,13 @@ export function finalSummary(run: RewardRun): string {
     ].join('\n');
   }
   if (run.status === 'failed' && !run.grader.complete) {
+    const criticFailure = run.actor.critic_errors > 0
+      ? `Critic 出现 ${run.actor.critic_errors} 次不可用事件；它们没有被记作 silent，pending action 也没有被放行。`
+      : `Actor 已执行 ${run.actor.tool_calls} 次工具调用，Critic 已审阅 ${run.actor.turns_reviewed} 次；由于没有官方 grader 结果，本次不能判定 resolved 或 unresolved。`;
     return [
       `任务 **${run.task.task_id}** 的运行在官方评分前中断。`,
       '',
-      `Actor 已执行 ${run.actor.tool_calls} 次工具调用，Critic 已审阅 ${run.actor.turns_reviewed} 次；由于没有官方 grader 结果，本次不能判定 resolved 或 unresolved。`,
+      criticFailure,
       '',
       `服务状态：${run.message}`,
     ].join('\n');

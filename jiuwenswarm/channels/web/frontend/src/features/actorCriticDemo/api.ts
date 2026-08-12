@@ -36,6 +36,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 function normalizeRun(run: RewardRun): RewardRun {
   return {
     ...run,
+    actor: {
+      ...run.actor,
+      critic_errors: run.actor.critic_errors ?? 0,
+    },
     timeline: (run.timeline || []).map((event) => {
       if (!event.metrics) return event;
       const legacy = event.metrics as typeof event.metrics & {

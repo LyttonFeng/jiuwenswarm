@@ -66,8 +66,8 @@ export interface RewardTimelineEvent {
   kind: 'builder_round' | 'rewardpack_certified' | 'actor_critic_turn' | 'actor_hint_action' | 'actor_action' | 'critic_intervention' | 'actor_final' | 'grader_result';
   title: string;
   detail: string;
-  status: 'running' | 'completed' | 'revised';
-  decision?: 'speak' | 'silent';
+  status: 'running' | 'completed' | 'revised' | 'failed';
+  decision?: 'speak' | 'silent' | 'error';
   metrics?: {
     state_value: number | null;
     actor_q: number | null;
@@ -82,6 +82,7 @@ export interface RewardTimelineEvent {
 export interface ActorStatus {
   started: boolean;
   turns_reviewed: number;
+  critic_errors: number;
   interventions: number;
   tool_calls: number;
   latest_hint: string;
