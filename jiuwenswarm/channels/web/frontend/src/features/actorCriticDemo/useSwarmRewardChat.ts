@@ -93,6 +93,7 @@ export function useSwarmRewardChat(
   const [recentRuns, setRecentRuns] = useState<RewardRun[]>([]);
   const [selectedTask, setSelectedTask] = useState<RewardTaskPreset | null>(null);
   const [run, setRun] = useState<RewardRun | null>(null);
+  const resumeLiveExecution = new URLSearchParams(window.location.search).get('execution') === 'live';
   const progressRef = useRef<Progress | null>(null);
   const replayedRunRef = useRef<string | null>(null);
   const pendingAgentContextRef = useRef<string | null>(null);
@@ -325,13 +326,18 @@ export function useSwarmRewardChat(
           throw new Error('该链接不是 Code Normal baseline 运行');
         }
         setSelectedTask(next.task);
-        if (presentation !== 'code_normal_baseline') setRun(next);
+        if (resumeLiveExecution) {
+          setRun(next);
+          publishRun(next);
+        } else if (presentation !== 'code_normal_baseline') {
+          setRun(next);
+        }
       })
       .catch((reason) => {
         replayedRunRef.current = null;
         addMessage('system', `无法载入运行 ${initialRunId}：${reason instanceof Error ? reason.message : String(reason)}`);
       });
-  }, [addMessage, enabled, initialRunId, presentation]);
+  }, [addMessage, enabled, initialRunId, presentation, publishRun, resumeLiveExecution]);
 
   useEffect(() => {
     if (!enabled || !run || isTerminal(run)) return;
@@ -389,6 +395,7 @@ export function useSwarmRewardChat(
       const next = await startActorCriticFromRewardPack(task.task_id);
       const url = new URL(window.location.href);
       url.searchParams.set('run', next.run_id);
+      url.searchParams.set('execution', 'live');
       window.history.replaceState(window.history.state, '', url);
       setRun(next);
       publishRun(next);
@@ -434,6 +441,7 @@ export function useSwarmRewardChat(
         const next = await startCodeNormalBaseline(pinned.task.task_id);
         const url = new URL(window.location.href);
         url.searchParams.set('run', next.run_id);
+        url.searchParams.set('execution', 'live');
         window.history.replaceState(window.history.state, '', url);
         setRun(next);
         publishRun(next);
