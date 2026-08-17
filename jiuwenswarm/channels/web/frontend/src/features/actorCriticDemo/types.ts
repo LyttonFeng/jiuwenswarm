@@ -1,6 +1,6 @@
 export type PackMode =
-  | 'rebuild_answer_blind'
-  | 'rebuild_gold_assisted';
+  | 'rebuild_fresh'
+  | 'rebuild_with_successful_witness';
 
 export interface RewardTaskPreset {
   task_id: string;
@@ -34,15 +34,18 @@ export interface RewardExecutionEnvironment {
 export interface RewardPackStatus {
   available: boolean;
   verified: boolean;
+  rewardpack_id: string;
   probe_count: number;
   passed: number;
-  answer_blind: boolean;
-  law_id: string;
+  construction: {
+    successful_witness_used: boolean;
+    successful_witness_source: string;
+    experience_view_sha256: string;
+  };
   boundary: {
-    mode: string;
-    teacher_gold_access: boolean;
-    actor_gold_access: boolean;
+    successful_witness_visible_to_actor: boolean;
     hidden_tests_used: boolean;
+    official_grader_feedback_used: boolean;
   };
   criteria: Array<{
     id: string;
@@ -63,19 +66,22 @@ export interface RewardPackStatus {
 export interface RewardTimelineEvent {
   id: string;
   stage: 'rewardpack' | 'actor' | 'grader';
-  kind: 'builder_round' | 'rewardpack_certified' | 'actor_critic_turn' | 'actor_hint_action' | 'actor_action' | 'critic_intervention' | 'actor_final' | 'grader_result';
+  kind: 'teacher_role' | 'builder_round' | 'rewardpack_certified' | 'actor_critic_turn' | 'actor_hint_action' | 'actor_action' | 'critic_intervention' | 'actor_final' | 'grader_result';
   title: string;
   detail: string;
-  status: 'running' | 'completed' | 'revised' | 'failed';
+  status: 'running' | 'completed' | 'revised' | 'failed' | 'timed_out';
   decision?: 'speak' | 'silent' | 'error';
   metrics?: {
-    state_value: number | null;
-    actor_q: number | null;
-    revision_q: number | null;
-    intervention_gain: number | null;
-    revision_relation: string;
+    actor_success_value: number | null;
+    revision_success_value: number | null;
+    counterfactual_advantage: number | null;
+    intervention_threshold: number | null;
     confidence: number | null;
-    criterion_scores: Array<{ criterion_id: string; score: number | null; constraint_status: string }>;
+    frontier: string[];
+    environment_veto: boolean;
+    regressed_requirements: string[];
+    state_trace: string[];
+    model_calls: string[];
   };
 }
 

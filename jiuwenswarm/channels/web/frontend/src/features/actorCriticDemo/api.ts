@@ -10,7 +10,7 @@ import type {
 const API_BASE = (
   import.meta.env.VITE_SWARM_REWARD_API_BASE || '/swarm-reward-api'
 ).replace(/\/$/, '');
-const EXPECTED_PROTOCOL_VERSION = 'swarm_reward.web_chat.v5';
+const EXPECTED_PROTOCOL_VERSION = 'swarm_reward.web_chat.v6';
 
 function assertProtocol(version: string): void {
   if (version !== EXPECTED_PROTOCOL_VERSION) {
@@ -40,20 +40,7 @@ function normalizeRun(run: RewardRun): RewardRun {
       ...run.actor,
       critic_errors: run.actor.critic_errors ?? 0,
     },
-    timeline: (run.timeline || []).map((event) => {
-      if (!event.metrics) return event;
-      const legacy = event.metrics as typeof event.metrics & {
-        predicted_hint_gain?: number | null;
-      };
-      return {
-        ...event,
-        metrics: {
-          ...event.metrics,
-          intervention_gain:
-            event.metrics.intervention_gain ?? legacy.predicted_hint_gain ?? null,
-        },
-      };
-    }),
+    timeline: run.timeline || [],
   };
 }
 

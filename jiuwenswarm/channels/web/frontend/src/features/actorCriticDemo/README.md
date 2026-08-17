@@ -33,13 +33,23 @@ If `请解决` is sent when a certified Pack already exists, the same reuse path
 used. The browser never chooses a server path or trusts a client-supplied Pack ID;
 the service resolves and validates the latest same-task Pack.
 
+This frozen-Pack path is the default leadership-demo path: it avoids a long live
+Builder run while preserving the real Actor-Critic sandbox execution, saved turn
+history, patch, and official grader result. `rebuild_fresh` and
+`rebuild_with_successful_witness` remain explicit research/reproduction modes.
+
+The research model keeps Transition and Value as separate mathematical roles. The
+runtime evaluates both roles in one structured Transition-Value request so the two
+candidates share one context and one network round trip. Environment replay and
+deterministic veto remain separate authorities and always override model estimates.
+
 The selected task is retained across turns, so natural follow-ups such as
 `RewardPack 好了吗？` or `那就开始吧` need not repeat the task ID. After either
 execution path, follow-up messages can inspect the patch, Critic intervention,
 official score, or open the corresponding dashboard run. Builder rounds, Actor tool
 actions, Critic interventions, and grader results appear as normal JiuwenSwarm tool
-events. Gold-assisted mode means
-only the offline RewardPack Builder sees Gold; Actor and online Critic do not.
+events. When construction uses a successful witness, that fact is recorded in the
+Pack boundary; the witness is never exposed to Actor or online Critic.
 
 The separation keeps the research claim legible: conversation is the intervention
 surface, while the dashboard is evidence inspection.

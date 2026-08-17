@@ -401,13 +401,13 @@
   font-weight: 650;
 }
 
-.swarm-reward__badges .is-answer-blind {
+.swarm-reward__badges .is-fresh {
   border-color: var(--color-border-success);
   background: var(--color-feedback-success-subtle);
   color: var(--color-feedback-success);
 }
 
-.swarm-reward__badges .is-gold-assisted {
+.swarm-reward__badges .is-witness-assisted {
   border-color: var(--color-border-warning);
   background: var(--color-feedback-warning-subtle);
   color: var(--color-feedback-warning);

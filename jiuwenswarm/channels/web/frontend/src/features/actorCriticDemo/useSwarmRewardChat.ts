@@ -180,7 +180,7 @@ export function useSwarmRewardChat(
       });
       if (event.kind === 'rewardpack_certified' && !previousStatus) {
         addMessage('assistant', next.rewardpack_source_run_id
-          ? `已按内容哈希校验并载入 **${next.rewardpack.passed}/${next.rewardpack.probe_count} probes** 的冻结 RewardPack。现在开始 online Actor-Critic；Actor 与 Critic 不会看到 Gold patch。`
+          ? `已按内容哈希校验并载入 **${next.rewardpack.passed}/${next.rewardpack.probe_count} probes** 的冻结 RewardPack。现在开始 online Actor-Critic；Actor 与 Critic 不会看到构建时的成功 witness。`
           : rewardPackContent(next));
       }
     }
@@ -253,11 +253,11 @@ export function useSwarmRewardChat(
         content: [
           '**Swarm Reward Coding Agent 已就绪。**',
           '',
-          '告诉我你想解决的仓库 issue，我会准备冻结工作区、构建 RewardPack，并启动 Actor-Critic。',
+          '告诉我你想解决的仓库 issue。领导现场演示会优先载入已认证的冻结 RewardPack，再启动 Actor-Critic。',
           '',
           '例如：`帮我解决 django__django-12325`。如果只想先看结果，可以说：`看看 12325 的演示运行`。',
           '',
-          'Gold-assisted 仅用于 RewardPack Builder；Actor 与 Critic 不会看到 Gold patch。',
+          '如果没有可复用 Pack，Builder 可以使用成功 witness 重新构建；Actor 与 Critic 不可见 witness。',
         ].join('\n'),
       });
     }
@@ -302,7 +302,7 @@ export function useSwarmRewardChat(
     setSelectedTask(task);
     useChatStore.getState().setProcessing(sessionId, true);
     useChatStore.getState().setThinking(sessionId, true);
-    addMessage('assistant', `已接管 **${task.task_id}**。正在远端沙箱启动新的 ${mode === 'rebuild_gold_assisted' ? 'Gold-assisted' : 'Answer-blind'} 完整链路。`);
+    addMessage('assistant', `已接管 **${task.task_id}**。没有可复用的冻结 Pack，正在远端沙箱${mode === 'rebuild_with_successful_witness' ? '使用成功 witness ' : ''}构建并执行完整链路。`);
     try {
       const next = await startRewardRun(task.task_id, mode);
       setRun(next);
@@ -318,7 +318,7 @@ export function useSwarmRewardChat(
     setSelectedTask(task);
     useChatStore.getState().setProcessing(sessionId, true);
     useChatStore.getState().setThinking(sessionId, true);
-    addMessage('assistant', `开始为 **${task.task_id}** 构建 ${mode === 'rebuild_gold_assisted' ? 'Gold-assisted' : 'Answer-blind'} RewardPack。构建轮次与沙箱认证结果会实时显示在这里；本次不会自动启动 Actor。`);
+    addMessage('assistant', `开始为 **${task.task_id}** ${mode === 'rebuild_with_successful_witness' ? '使用成功 witness ' : '从当前任务证据'}构建 RewardPack。构建轮次与沙箱认证结果会实时显示在这里；本次不会自动启动 Actor。`);
     try {
       const next = await startRewardPackBuild(task.task_id, mode);
       setRun(next);
@@ -403,9 +403,9 @@ export function useSwarmRewardChat(
         const requestedMode = route.pack_mode;
         const mode = requestedMode && task.available_pack_modes.includes(requestedMode)
           ? requestedMode
-          : task.available_pack_modes.includes('rebuild_gold_assisted')
-            ? 'rebuild_gold_assisted'
-            : task.available_pack_modes[0] || 'rebuild_answer_blind';
+          : task.available_pack_modes.includes('rebuild_with_successful_witness')
+            ? 'rebuild_with_successful_witness'
+            : task.available_pack_modes[0] || 'rebuild_fresh';
         keepProcessing = true;
         await beginRun(task, mode);
         return true;
@@ -423,9 +423,9 @@ export function useSwarmRewardChat(
         const requestedMode = route.pack_mode;
         const mode = requestedMode && task.available_pack_modes.includes(requestedMode)
           ? requestedMode
-          : task.available_pack_modes.includes('rebuild_gold_assisted')
-            ? 'rebuild_gold_assisted'
-            : task.available_pack_modes[0] || 'rebuild_answer_blind';
+          : task.available_pack_modes.includes('rebuild_with_successful_witness')
+            ? 'rebuild_with_successful_witness'
+            : task.available_pack_modes[0] || 'rebuild_fresh';
         keepProcessing = true;
         await beginBuild(task, mode);
         return true;

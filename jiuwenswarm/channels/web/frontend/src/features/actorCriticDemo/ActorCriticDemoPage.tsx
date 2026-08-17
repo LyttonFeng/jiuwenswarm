@@ -42,13 +42,13 @@ const STAGES = [
 ] as const;
 
 const PACK_MODE_LABELS: Record<PackMode, { title: string; description: string }> = {
-  rebuild_answer_blind: {
-    title: '现场重建 Answer-blind Pack',
-    description: '只读取公开 issue、Repo 与沙箱反馈；耗时较长。',
+  rebuild_fresh: {
+    title: '现场全新构建 Pack',
+    description: '从任务、Repo 与沙箱证据重新构建；适合研究复现，现场耗时较长。',
   },
-  rebuild_gold_assisted: {
-    title: '现场重建 Gold-assisted Pack',
-    description: 'Teacher 可看 Gold patch；用于机制上界，不是泛化结果。',
+  rebuild_with_successful_witness: {
+    title: '使用成功 witness 重建 Pack',
+    description: 'Builder 使用成功 witness 提高构建稳定性；Actor 与 Critic 不可见 witness。',
   },
 };
 
@@ -74,10 +74,10 @@ function shortCommit(value: string): string {
 }
 
 function preferredPackMode(task?: RewardTaskPreset): PackMode {
-  if (task?.available_pack_modes.includes('rebuild_gold_assisted')) {
-    return 'rebuild_gold_assisted';
+  if (task?.available_pack_modes.includes('rebuild_with_successful_witness')) {
+    return 'rebuild_with_successful_witness';
   }
-  return task?.available_pack_modes[0] || 'rebuild_answer_blind';
+  return task?.available_pack_modes[0] || 'rebuild_fresh';
 }
 
 export default function ActorCriticDemoPage() {
@@ -85,7 +85,7 @@ export default function ActorCriticDemoPage() {
   const [tasks, setTasks] = useState<RewardTaskPreset[]>([]);
   const [runtime, setRuntime] = useState<RewardRuntimeInfo | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState('');
-  const [packMode, setPackMode] = useState<PackMode>('rebuild_gold_assisted');
+  const [packMode, setPackMode] = useState<PackMode>('rebuild_with_successful_witness');
   const [run, setRun] = useState<RewardRun | null>(null);
   const [recentRuns, setRecentRuns] = useState<RewardRun[]>([]);
   const [starting, setStarting] = useState(false);
@@ -308,8 +308,8 @@ export default function ActorCriticDemoPage() {
                   <div className="swarm-reward__badges">
                     <span>{selectedTask?.repo_slug || '载入任务中'}</span>
                     <span>base {selectedTask ? shortCommit(selectedTask.base_commit) : '—'}</span>
-                    <span className={packMode === 'rebuild_gold_assisted' ? 'is-gold-assisted' : 'is-answer-blind'}>
-                      {packMode === 'rebuild_gold_assisted' ? 'Gold-assisted · Actor 未看 Gold' : 'Answer-blind'}
+                    <span className={packMode === 'rebuild_with_successful_witness' ? 'is-witness-assisted' : 'is-fresh'}>
+                      {packMode === 'rebuild_with_successful_witness' ? '成功 witness 仅用于构建' : 'Fresh construction'}
                     </span>
                   </div>
                   <h2>{selectedTask?.title || '正在从远端载入任务'}</h2>
@@ -330,6 +330,7 @@ export default function ActorCriticDemoPage() {
                   <div>
                     <b>RewardPack 模式</b>
                     <span>{PACK_MODE_LABELS[packMode].description}</span>
+                    <span>领导现场演示优先从对话 Agent 复用已认证的冻结 Pack；这里保留完整重建入口。</span>
                   </div>
                 </div>
                 <label className="swarm-reward__mode-select">
@@ -393,7 +394,7 @@ export default function ActorCriticDemoPage() {
                       icon={DatabaseZap}
                       title="RewardPack"
                       state={run?.rewardpack.verified ? 'done' : run?.phase === 'rewardpack' ? 'running' : 'waiting'}
-                      detail={run?.rewardpack.verified ? `${run.rewardpack.passed}/${run.rewardpack.probe_count} 个验收 probe 经沙箱认证${run.rewardpack.answer_blind ? '；未使用 Gold / hidden tests' : run.pack_mode === 'rebuild_gold_assisted' ? '；Teacher 使用 Gold，Actor 未看 Gold' : ''}` : '等待构建或载入任务验收标准'}
+                      detail={run?.rewardpack.verified ? `${run.rewardpack.passed}/${run.rewardpack.probe_count} 个 probe 经沙箱认证并冻结${run.rewardpack.rewardpack_id ? `；Pack ${run.rewardpack.rewardpack_id}` : ''}${run.rewardpack.construction.successful_witness_used ? '；成功 witness 仅用于 Builder，Actor/Critic 不可见' : '；fresh construction'}${run.rewardpack.boundary.hidden_tests_used ? '；使用了 hidden tests' : '；未使用 hidden tests'}` : '等待构建或载入冻结 RewardPack'}
                     />
                     <TimelineItem
                       icon={Bot}
@@ -473,10 +474,10 @@ export default function ActorCriticDemoPage() {
                           <pre>{event.detail}</pre>
                           {event.metrics ? (
                             <div className="swarm-reward__history-metrics">
-                              <Metric label="V(s)" value={formatMetric(event.metrics.state_value)} />
-                              <Metric label="Q(actor)" value={formatMetric(event.metrics.actor_q)} />
-                              <Metric label="Q(revision)" value={formatMetric(event.metrics.revision_q)} />
-                              <Metric label="Intervention gain" value={formatMetric(event.metrics.intervention_gain)} />
+                              <Metric label="V(next | Actor)" value={formatMetric(event.metrics.actor_success_value)} />
+                              <Metric label="V(next | Revision)" value={formatMetric(event.metrics.revision_success_value)} />
+                              <Metric label="A_cf" value={formatMetric(event.metrics.counterfactual_advantage)} />
+                              <Metric label="Threshold" value={formatMetric(event.metrics.intervention_threshold)} />
                             </div>
                           ) : null}
                         </details>

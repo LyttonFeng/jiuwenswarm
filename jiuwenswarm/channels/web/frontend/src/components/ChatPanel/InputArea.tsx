@@ -14,7 +14,6 @@
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { AtSign, CircleX, ClipboardList, FileText, Loader2, Plus, ShieldCheck, Square, Target, X } from 'lucide-react';
-import { FileTypeIcon, getFileTypeIconKeyFromFilename, type FileTypeIconKey } from './FileTypeIcon';
 import { useSpeechRecognition } from '../../hooks';
 
 // import { stopAllTts } from '../../utils';
@@ -36,6 +35,7 @@ import { AGENT_MODE_OPTIONS, PERMISSION_OPTIONS } from '../../config/chatConfig'
 import clsx from 'clsx';
 import { PermissionWarningDialog } from './PermissionWarningDialog';
 import { ModelProviderIcon } from '../ModelProviderIcon';
+import { FileIcon } from '../FileIcon';
 import { getEvolutionPillLabel } from './evolution-status';
 import { webRequest } from '../../services/webClient';
 import { getSkillAvatar } from '../../utils/skillAvatar';
@@ -319,14 +319,6 @@ function getFileExtension(filename: string): string {
   const idx = filename.lastIndexOf('.');
   if (idx < 0) return '';
   return filename.slice(idx).toLowerCase();
-}
-
-function getAttachmentTypeKey(attachment: AttachmentDraft): FileTypeIconKey {
-  return getFileTypeIconKeyFromFilename(attachment.filename, attachment.kind);
-}
-
-function AttachmentTypeIcon({ attachment }: { attachment: AttachmentDraft }) {
-  return <FileTypeIcon typeKey={getAttachmentTypeKey(attachment)} size={32} />;
 }
 
 function attachmentToMediaItem(attachment: AttachmentDraft): MediaItem {
@@ -1322,12 +1314,13 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
         (Boolean(pickString(attachment.persistedMediaItem?.path)) || Boolean(attachment.base64Data)),
     );
     const trimmed = buildSubmitContent(trimmedBase, readyDrafts);
-    // Require typed/voice text — attachments alone must not enable send.
-    if (!trimmedBase || hasUploadingAttachments || hasAttachmentErrors) return;
+    const hasReadyMedia = readyMediaItems.length > 0;
+    // Block only when there is neither text nor a ready attachment to send.
+    if ((!trimmedBase && !hasReadyMedia) || hasUploadingAttachments || hasAttachmentErrors) return;
     // In agent mode attachments queue with the task (taskQueue carries mediaItems).
     // Other non-team modes still go through the text-only onInterrupt channel where
     // attachments would be lost, so keep blocking there.
-    if (isInterruptible && !isTeamMode && !isAgentMode && readyMediaItems.length > 0) return;
+    if (isInterruptible && !isTeamMode && !isAgentMode && hasReadyMedia) return;
 
     if (isListening) {
       stopListening();
@@ -1419,8 +1412,9 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
   const isImageInterruptBlocked =
     isInterruptible && !isTeamMode && !isAgentMode && readyMediaItems.length > 0;
   const showStop = isProcessing && !isPaused && !hasDraft;
+  const hasReadyMedia = readyMediaItems.length > 0;
   const canSubmit = showStop || (
-    hasTextDraft &&
+    (hasTextDraft || hasReadyMedia) &&
     !isLoadingHistory &&
     !isImageInterruptBlocked &&
     !hasUploadingAttachments &&
@@ -1980,13 +1974,14 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
   return (
     <>
       {attachmentAlerts.length > 0 && attachmentAlertPortalTarget && createPortal(
-        <div className="chat-input-local-alerts" role="status" aria-live="polite">
+        <div className="chat-input-local-alerts" role="status" aria-live="polite" data-testid="chat-panel-input-local-alerts">
           {attachmentAlerts.map((alert) => (
-            <div className="chat-input-local-alert" key={alert.id}>
+            <div className="chat-input-local-alert" key={alert.id} data-testid="chat-panel-input-local-alert" data-variant={alert.id}>
               <CircleX size={16} strokeWidth={2.2} aria-hidden="true" />
               <span>{alert.message}</span>
               <button
                 type="button"
+                data-testid="chat-panel-input-local-alert-dismiss"
                 onClick={() => dismissAttachmentAlert(alert.id)}
                 aria-label={t('common.close')}
               >
@@ -1997,7 +1992,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
         </div>,
         attachmentAlertPortalTarget,
       )}
-      <div className="chat-input-frame">
+      <div className="chat-input-frame" data-testid="chat-panel-input-frame">
         <div
           className={cx(
             'chat-input-container',
@@ -2006,23 +2001,25 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
             composerSuggestion && 'chat-input-container--suggestion-open',
             isListening && 'chat-input-container--recording',
           )}
+          data-testid="chat-panel-input-container"
           onDragOver={handleFileDragOver}
           onDrop={handleFileDrop}
         >
       {isListening && (
-        <div className="chat-input-recording-bar">
+        <div className="chat-input-recording-bar" data-testid="chat-panel-input-recording-bar">
           <span className="chat-input-recording-dot" />
           <span>{t('chat.recording')}</span>
         </div>
       )}
 
       {attachments.length > 0 && (
-        <div className="chat-input-attachment-panel">
+        <div className="chat-input-attachment-panel" data-testid="chat-panel-input-attachment-panel">
           <div
             className={cx(
               'chat-input-attachment-grid',
               attachmentMenuId && 'chat-input-attachment-grid--menu-open',
             )}
+            data-testid="chat-panel-input-attachment-grid"
           >
             {attachments.map((attachment) => (
               <div
@@ -2032,34 +2029,39 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                   attachment.status === 'uploading' && 'chat-input-attachment-card--uploading',
                 )}
                 key={attachment.id}
+                data-testid="chat-panel-input-attachment-card"
+                data-variant={attachment.id}
               >
                 <div
                   className={cx(
                     'chat-input-attachment-preview',
-                    `chat-input-attachment-preview--${getAttachmentTypeKey(attachment)}`,
+                    attachment.previewUrl && 'chat-input-attachment-preview--image',
                   )}
                   aria-hidden="true"
+                  data-testid="chat-panel-input-attachment-preview"
                 >
                   {attachment.previewUrl ? (
                     <img src={attachment.previewUrl} alt="" />
                   ) : (
-                    <AttachmentTypeIcon attachment={attachment} />
+                    <FileIcon fileName={attachment.filename} size={32} />
                   )}
                 </div>
-                <div className="chat-input-attachment-main">
-                  <div className="chat-input-attachment-name" title={attachment.filename}>
+                <div className="chat-input-attachment-main" data-testid="chat-panel-input-attachment-main">
+                  <div className="chat-input-attachment-name" title={attachment.filename} data-testid="chat-panel-input-attachment-name">
                     {attachment.filename}
                   </div>
-                  <div className="chat-input-attachment-meta">
+                  <div className="chat-input-attachment-meta" data-testid="chat-panel-input-attachment-meta">
                     {attachment.status === 'uploading' ? (
                       <>
                         <Loader2 className="chat-input-attachment-spin" size={12} strokeWidth={2} />
-                        <span>上传中...</span>
+                        <span data-testid="chat-panel-input-attachment-status" data-variant="uploading">上传中...</span>
                       </>
                     ) : attachment.status === 'error' ? (
                       <>
                         <span
                           className="chat-input-attachment-status-error"
+                          data-testid="chat-panel-input-attachment-status"
+                          data-variant="error"
                           title={attachment.error || '上传失败'}
                         >
                           上传失败
@@ -2068,6 +2070,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                           <button
                             type="button"
                             className="chat-input-attachment-retry"
+                            data-testid="chat-panel-input-attachment-retry"
                             onClick={() => retryAttachment(attachment)}
                           >
                             重试
@@ -2089,6 +2092,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                 <button
                   type="button"
                   className="chat-input-attachment-remove"
+                  data-testid="chat-panel-input-attachment-remove"
                   onPointerDown={() => startAttachmentMenuTimer(attachment.id)}
                   onPointerUp={stopAttachmentMenuTimer}
                   onPointerCancel={stopAttachmentMenuTimer}
@@ -2105,10 +2109,11 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                   <X size={12} strokeWidth={2} />
                 </button>
                 {attachmentMenuId === attachment.id && (
-                  <div className="chat-input-attachment-menu" role="menu">
+                  <div className="chat-input-attachment-menu" role="menu" data-testid="chat-panel-input-attachment-menu">
                     <button
                       type="button"
                       role="menuitem"
+                      data-testid="chat-panel-input-attachment-menu-delete"
                       onClick={() => removeAttachment(attachment.id)}
                     >
                       删除
@@ -2116,6 +2121,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                     <button
                       type="button"
                       role="menuitem"
+                      data-testid="chat-panel-input-attachment-menu-clear"
                       onClick={clearAttachments}
                     >
                       清空附件
@@ -2163,22 +2169,24 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                     : t('chat.placeholder')
         }
         className="chat-input-editor"
-        data-testid="chat-input"
+        data-testid="chat-panel-input"
       />
 
-      <div className="chat-input-toolbar">
-        <div className="chat-input-toolbar-left">
+      <div className="chat-input-toolbar" data-testid="chat-panel-input-toolbar">
+        <div className="chat-input-toolbar-left" data-testid="chat-panel-input-toolbar-left">
           <input
             ref={fileInputRef}
             type="file"
             accept={ATTACHMENT_ACCEPT}
             multiple
             className="hidden"
+            data-testid="chat-panel-input-file-input"
             onChange={handleFileInputChange}
           />
-          <div ref={attachMenuRef} className="chat-input-attach-menu-anchor">
+          <div ref={attachMenuRef} className="chat-input-attach-menu-anchor" data-testid="chat-panel-input-attach-menu-anchor">
             <button
               type="button"
+              data-testid="chat-panel-input-attach-trigger"
               onClick={() => {
                 if (attachTriggerDisabled) return;
                 if (!attachMenuOpen && attachMenuRef.current) {
@@ -2203,6 +2211,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                 ref={attachMenuPortalRef}
                 className="chat-mode-select__menu"
                 role="menu"
+                data-testid="chat-panel-input-attach-menu"
                 style={{
                   position: 'fixed',
                   bottom: window.innerHeight - attachMenuAnchor.top + 10,
@@ -2214,6 +2223,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                   type="button"
                   className="chat-mode-select__option"
                   role="menuitem"
+                  data-testid="chat-panel-input-attach-menu-file"
                   disabled={imageInputDisabled}
                   title={imageInputDisabled ? t('chat.addFileDisabled') : undefined}
                   onClick={() => {
@@ -2241,6 +2251,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                       type="button"
                       className="chat-mode-select__option"
                       role="menuitem"
+                      data-testid="chat-panel-input-attach-menu-goal"
                       disabled={goalDisabled}
                       title={goalDisabledTitle}
                       onClick={() => {
@@ -2279,6 +2290,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                       type="button"
                       className="chat-mode-select__option"
                       role="menuitem"
+                      data-testid="chat-panel-input-attach-menu-plan"
                       disabled={planDisabled}
                       title={planDisabledTitle}
                       onClick={() => {
@@ -2315,10 +2327,13 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
               'chat-mode-select',
               isModeMenuOpen && 'chat-mode-select--open',
             )}
+            data-testid="chat-panel-mode-select"
           >
             <button
               type="button"
               className="chat-mode-select__trigger"
+              data-testid="chat-panel-mode-select-trigger"
+              data-variant={currentMode.value}
               onClick={() => {
                 if (fixedModeLabel) return;
                 if (hasHistory || isProcessing) return;
@@ -2334,10 +2349,10 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
               aria-haspopup={fixedModeLabel ? undefined : 'menu'}
               aria-expanded={fixedModeLabel ? undefined : isModeMenuOpen}
               aria-disabled={Boolean(fixedModeLabel)}
-              data-testid={fixedModeLabel ? 'chat-mode-fixed' : `chat-mode-${currentMode.value}`}
+              data-fixed-mode={fixedModeLabel ? 'true' : undefined}
               style={(fixedModeLabel || hasHistory || isProcessing) ? { cursor: 'default' } : undefined}
             >
-              <span className="chat-mode-select__value">
+              <span className="chat-mode-select__value" data-testid="chat-panel-mode-select-value">
                 <span className="chat-mode-select__icon" aria-hidden="true">
                   {fixedModeLabel
                     ? <ShieldCheck className="w-4 h-4" />
@@ -2357,6 +2372,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                 ref={modeMenuPortalRef}
                 className="chat-mode-select__menu"
                 role="menu"
+                data-testid="chat-panel-mode-select-menu"
                 style={menuDirection === 'up'
                   ? { position: 'fixed', bottom: window.innerHeight - modeMenuAnchor.top + 10, left: modeMenuAnchor.left, zIndex: 9999 }
                   : { position: 'fixed', top: modeMenuAnchor.bottom + 10, left: modeMenuAnchor.left, zIndex: 9999 }
@@ -2375,7 +2391,8 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                     )}
                     role="menuitemradio"
                     aria-checked={mode === m.value}
-                    data-testid={`chat-mode-option-${m.value}`}
+                    data-testid="chat-panel-mode-select-option"
+                    data-variant={m.value}
                   >
                     <span className="chat-mode-select__option-main">
                       <span className="chat-mode-select__icon" aria-hidden="true">
@@ -2396,6 +2413,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
             {!fixedModeLabel && isModeMenuOpen && hoveredOptionDesc && modeMenuAnchor && createPortal(
               <div
                 className="chat-mode-option-tooltip"
+                data-testid="chat-panel-mode-select-tooltip"
                 style={menuDirection === 'up'
                   ? { position: 'fixed', bottom: window.innerHeight - modeMenuAnchor.top + 10, left: modeMenuAnchor.left + 188, zIndex: 10000 }
                   : { position: 'fixed', top: modeMenuAnchor.bottom + 10, left: modeMenuAnchor.left + 188, zIndex: 10000 }
@@ -2415,8 +2433,8 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
           />}
 
           {goalTagVisible && (
-            <div className="chat-goal-tag">
-              <button type="button" className="chat-mode-select__trigger">
+            <div className="chat-goal-tag" data-testid="chat-panel-goal-tag">
+              <button type="button" className="chat-mode-select__trigger" data-testid="chat-panel-goal-tag-label">
                 <span className="chat-mode-select__value">
                   <span className="chat-mode-select__icon" aria-hidden="true">
                     <Target className="w-4 h-4" />
@@ -2427,6 +2445,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
               <button
                 type="button"
                 className="chat-goal-tag__close"
+                data-testid="chat-panel-goal-tag-close"
                 title={t('goal.closeTag')}
                 onClick={() => {
                   if (!activeSessionId) return;
@@ -2442,8 +2461,8 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
           )}
 
           {planTagVisible && (
-            <div className="chat-goal-tag">
-              <button type="button" className="chat-mode-select__trigger">
+            <div className="chat-goal-tag" data-testid="chat-panel-plan-tag">
+              <button type="button" className="chat-mode-select__trigger" data-testid="chat-panel-plan-tag-label">
                 <span className="chat-mode-select__value">
                   <span className="chat-mode-select__icon" aria-hidden="true">
                     <ClipboardList className="w-4 h-4" />
@@ -2454,6 +2473,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
               <button
                 type="button"
                 className="chat-goal-tag__close"
+                data-testid="chat-panel-plan-tag-close"
                 disabled={isProcessing}
                 title={isProcessing ? t('plan.closeTagDisabled') : t('plan.closeTag')}
                 onClick={() => {
@@ -2468,14 +2488,14 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
           )}
 
           {evolutionLabel && (
-            <div className="chat-input-evolution-pill" title={evolutionLabel}>
+            <div className="chat-input-evolution-pill" data-testid="chat-panel-input-evolution-pill" title={evolutionLabel}>
               <span className="chat-input-evolution-pill__dot" />
               <span className="chat-input-evolution-pill__label">{evolutionLabel}</span>
             </div>
           )}
         </div>
 
-        <div className="chat-input-actions">
+        <div className="chat-input-actions" data-testid="chat-panel-input-actions">
           {/* {speechSupported && (
             <button
               type="button"
@@ -2515,7 +2535,8 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
               canSubmit ? 'chat-input-btn--send-active' : 'chat-input-btn--disabled',
             )}
             title={showStop ? t('chat.stop') : t('chat.send')}
-            data-testid="chat-send"
+            data-testid="chat-panel-input-send"
+            data-variant={showStop ? 'stop' : 'send'}
           >
             {showStop ? (
               <Square className="chat-input-btn-icon" fill="currentColor" strokeWidth={1.8} aria-hidden="true" />
@@ -2532,11 +2553,12 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
       </div>
 
       {showWorkContextRow ? (
-        <div ref={workMenuRef} className="chat-work-context-row">
-          <div className={clsx('chat-work-select', workMenuOpen === 'project' && 'chat-work-select--open')}>
+        <div ref={workMenuRef} className="chat-work-context-row" data-testid="chat-panel-work-context-row">
+          <div className={clsx('chat-work-select', workMenuOpen === 'project' && 'chat-work-select--open')} data-testid="chat-panel-work-select">
             <button
               type="button"
               className={clsx('chat-work-select__trigger', displayedProject && 'chat-work-select__trigger--selected')}
+              data-testid="chat-panel-work-select-trigger"
               onClick={() => !isWorkContextLocked && setWorkMenuOpen((open) => open === 'project' ? null : 'project')}
               disabled={isWorkContextLocked}
               title={displayedProject?.project_dir || (isWorkContextLocked ? t('multiSession.project.lockedProjectTitle') : t('multiSession.project.chooseProjectDirectory'))}
@@ -2552,6 +2574,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                 <button
                   type="button"
                   className="chat-work-select__clear"
+                  data-testid="chat-panel-work-select-clear"
                   aria-label={t('multiSession.project.clearProject')}
                   data-tooltip={t('multiSession.project.clearProject')}
                   onClick={() => {
@@ -2564,7 +2587,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
               </span>
             ) : null}
             {workMenuOpen === 'project' && !isWorkContextLocked ? (
-              <div className={clsx('chat-work-select__menu', hasInputProjectOptions && 'chat-work-select__menu--projects')} role="menu">
+              <div className={clsx('chat-work-select__menu', hasInputProjectOptions && 'chat-work-select__menu--projects')} role="menu" data-testid="chat-panel-work-select-menu">
                 {!hasInputProjectOptions ? (
                   <ProjectCreateMenu
                     onCreate={(mode) => {
@@ -2580,12 +2603,13 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                       <WorkIcon name="search" />
                       <input
                         className="chat-work-select__search"
+                        data-testid="chat-panel-work-select-search"
                         value={projectSearch}
                         onChange={(event) => setProjectSearch(event.target.value)}
                         placeholder={t('multiSession.project.searchProject')}
                       />
                     </label>
-                    <div className="chat-work-select__options">
+                    <div className="chat-work-select__options" data-testid="chat-panel-work-select-options">
                       {inputProjectOptions.map((project) => {
                         const active = selectedProject?.project_id === project.project_id;
                         return (
@@ -2593,6 +2617,8 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                             type="button"
                             key={project.project_id}
                             className={clsx('chat-work-select__option', active && 'is-active')}
+                            data-testid="chat-panel-work-select-option"
+                            data-variant={project.project_id}
                             onClick={() => {
                               setSelectedProject(project);
                               setWorkMenuOpen(null);
@@ -2608,7 +2634,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
                         );
                       })}
                       {inputProjectOptions.length === 0 ? (
-                        <div className="chat-work-select__empty">{t('multiSession.project.noProjectMatches')}</div>
+                        <div className="chat-work-select__empty" data-testid="chat-panel-work-select-empty">{t('multiSession.project.noProjectMatches')}</div>
                       ) : null}
                     </div>
                     <ProjectAddSubmenu
@@ -2626,7 +2652,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
           ) : null}
           {projectDirError && !workDialogOpen ? (
             <div className="app-toast-wrapper app-toast-wrapper--top-center">
-              <div className="app-session-toast" role="status" aria-live="polite">
+              <div className="app-session-toast" role="status" aria-live="polite" data-testid="chat-panel-work-select-error-toast">
                 {projectDirError}
               </div>
             </div>
@@ -2635,9 +2661,10 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
       ) : null}
 
       {workDialogOpen ? (
-        <div className="chat-work-dialog-backdrop" role="presentation">
+        <div className="chat-work-dialog-backdrop" role="presentation" data-testid="chat-panel-work-dialog">
           <form
             className="chat-work-dialog"
+            data-testid="chat-panel-work-dialog-form"
             onSubmit={(event) => {
               event.preventDefault();
               void handleAddProjectDir();
@@ -2646,6 +2673,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
             <button
               type="button"
               className="chat-work-dialog__close"
+              data-testid="chat-panel-work-dialog-close"
               aria-label={t('common.close')}
               onClick={() => {
                 setProjectDirDraft('');
@@ -2656,13 +2684,14 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
             >
               <WorkIcon name="close" />
             </button>
-            <div className="chat-work-dialog__title">
+            <div className="chat-work-dialog__title" data-testid="chat-panel-work-dialog-title">
               {projectCreateMode === 'existing'
                 ? t('multiSession.project.selectExisting')
                 : t('multiSession.project.createBlank')}
             </div>
             <input
               className="chat-work-dialog__input"
+              data-testid="chat-panel-work-dialog-name-input"
               value={projectNameDraft}
               onChange={(event) => setProjectNameDraft(event.target.value)}
               placeholder={t('multiSession.project.namePlaceholder')}
@@ -2671,15 +2700,18 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
             {projectCreateMode === 'existing' ? (
               <input
                 className="chat-work-dialog__input"
+                data-testid="chat-panel-work-dialog-path-input"
+                data-variant="existing"
                 value={projectDirDraft}
                 onChange={(event) => setProjectDirDraft(event.target.value)}
                 placeholder={t('multiSession.project.pathPlaceholder')}
               />
             ) : null}
-            {projectDirError ? <div className="chat-work-dialog__error">{projectDirError}</div> : null}
-            <div className="chat-work-dialog__actions">
+            {projectDirError ? <div className="chat-work-dialog__error" data-testid="chat-panel-work-dialog-error">{projectDirError}</div> : null}
+            <div className="chat-work-dialog__actions" data-testid="chat-panel-work-dialog-actions">
               <button
                 type="button"
+                data-testid="chat-panel-work-dialog-cancel"
                 onClick={() => {
                   setProjectDirDraft('');
                   setProjectNameDraft('');
@@ -2691,6 +2723,7 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
               </button>
               <button
                 type="submit"
+                data-testid="chat-panel-work-dialog-confirm"
                 disabled={!projectNameDraft.trim() || (projectCreateMode === 'existing' && !projectDirDraft.trim())}
               >
                 {t('multiSession.project.confirm')}
@@ -2708,11 +2741,12 @@ export const InputArea = forwardRef<InputAreaHandle, InputAreaProps>(function In
 function ProjectAddSubmenu({ onCreate }: { onCreate: (mode: ProjectCreateMode) => void }) {
   const { t } = useTranslation();
   return (
-    <div className="chat-work-select__add" role="none">
+    <div className="chat-work-select__add" role="none" data-testid="chat-panel-work-select-add">
       <button
         type="button"
         className="chat-work-select__option chat-work-select__option--compact"
         role="menuitem"
+        data-testid="chat-panel-work-select-add-trigger"
         aria-haspopup="menu"
       >
         <WorkIcon name="add" />
@@ -2747,14 +2781,14 @@ function ComposerSuggestionMenu({
   const tokenPrefix = suggestion.kind === 'role' ? '$' : '@';
 
   return (
-    <div className="chat-composer-suggestion" role="listbox">
-      <div className="chat-composer-suggestion__header">
+    <div className="chat-composer-suggestion" role="listbox" data-testid="chat-panel-composer-suggestion">
+      <div className="chat-composer-suggestion__header" data-testid="chat-panel-composer-suggestion-header">
         <AtSign size={14} />
         <span>选择团队成员</span>
       </div>
-      <div className="chat-composer-suggestion__list">
+      <div className="chat-composer-suggestion__list" data-testid="chat-panel-composer-suggestion-list">
         {items.length === 0 ? (
-          <div className="chat-composer-suggestion__empty">
+          <div className="chat-composer-suggestion__empty" data-testid="chat-panel-composer-suggestion-empty">
             暂无可选择的团队成员
           </div>
         ) : items.map((item, index) => (
@@ -2767,6 +2801,8 @@ function ComposerSuggestionMenu({
             )}
             role="option"
             aria-selected={highlightedIndex === index}
+            data-testid="chat-panel-composer-suggestion-item"
+            data-variant={item.id}
             onMouseDown={(event) => event.preventDefault()}
             onMouseEnter={() => onHighlight(index)}
             onClick={() => onPick(suggestion.kind, item.id, item.label)}
@@ -2845,6 +2881,7 @@ function ModelSelector({
     <div
       ref={menuRef}
       className={clsx('chat-mode-select', isOpen && 'chat-mode-select--open')}
+      data-testid="chat-panel-model-selector-root"
     >
       <button
         type="button"
@@ -2863,7 +2900,7 @@ function ModelSelector({
         aria-disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        data-testid="chat-model-selector"
+        data-testid="chat-panel-model-selector-trigger"
       >
         <span className="chat-mode-select__value">
           <span className="chat-mode-select__icon" aria-hidden="true">
@@ -2885,12 +2922,13 @@ function ModelSelector({
           ref={menuPortalRef}
           className="chat-mode-select__menu model-select__menu"
           role="menu"
+          data-testid="chat-panel-model-selector-menu"
           style={menuDirection === 'up'
             ? { position: 'fixed', bottom: window.innerHeight - menuAnchor.top + 10, left: menuAnchor.left, zIndex: 9999 }
             : { position: 'fixed', top: menuAnchor.bottom + 10, left: menuAnchor.left, zIndex: 9999 }
           }
         >
-          <div className="model-select__section-header">{t('chat.modelSelector.configured')}</div>
+          <div className="model-select__section-header" data-testid="chat-panel-model-selector-section-header">{t('chat.modelSelector.configured')}</div>
           {chatAvailableModels.map((m, idx) => {
             const key = m.alias || m.model_name;
             const isActive = key === (selectedModel.alias || selectedModel.model_name);
@@ -2905,6 +2943,8 @@ function ModelSelector({
                 )}
                 role="menuitemradio"
                 aria-checked={isActive}
+                data-testid="chat-panel-model-selector-option"
+                data-variant={key}
               >
                 <span className="chat-mode-select__option-main">
                   <span className="chat-mode-select__icon" aria-hidden="true">
@@ -2923,6 +2963,7 @@ function ModelSelector({
           <button
             type="button"
             className="model-select__add-btn"
+            data-testid="chat-panel-model-selector-add"
             onClick={handleAddModel}
           >
             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} width={14} height={14} aria-hidden="true">
@@ -2993,6 +3034,7 @@ function PermissionSelector({
       <div
         ref={menuRef}
         className={clsx('chat-mode-select', isOpen && 'chat-mode-select--open')}
+        data-testid="chat-panel-permission-selector-root"
       >
         <button
           type="button"
@@ -3001,6 +3043,8 @@ function PermissionSelector({
             permission === 'full_access' && !disabled && 'chat-mode-select__trigger--danger',
           )}
           disabled={disabled}
+          data-testid="chat-panel-permission-selector-trigger"
+          data-variant={permission}
           title={disabled ? t('chat.configLockedHistory') : undefined}
           onClick={() => {
             if (disabled) return;
@@ -3030,6 +3074,7 @@ function PermissionSelector({
             ref={menuPortalRef}
             className="chat-mode-select__menu perm-select__menu"
             role="menu"
+            data-testid="chat-panel-permission-selector-menu"
             style={menuDirection === 'up'
               ? { position: 'fixed', bottom: window.innerHeight - menuAnchor.top + 10, left: menuAnchor.left, zIndex: 9999 }
               : { position: 'fixed', top: menuAnchor.bottom + 10, left: menuAnchor.left, zIndex: 9999 }
@@ -3047,6 +3092,8 @@ function PermissionSelector({
                 )}
                 role="menuitemradio"
                 aria-checked={permission === opt.value}
+                data-testid="chat-panel-permission-selector-option"
+                data-variant={opt.value}
               >
                 <span className="perm-select__option-main">
                   <span className="chat-mode-select__icon" aria-hidden="true">
@@ -3200,6 +3247,7 @@ function SkillSelector({ onNavigateToSkills, onInsertSkill, onRemoveSkill }: {
     <div
       ref={menuRef}
       className={clsx('chat-skill-select', isOpen && 'chat-skill-select--open')}
+      data-testid="chat-panel-skill-select-root"
     >
       <button
         type="button"
@@ -3208,7 +3256,7 @@ function SkillSelector({ onNavigateToSkills, onInsertSkill, onRemoveSkill }: {
         aria-haspopup="menu"
         aria-expanded={isOpen}
         title={t('chat.skillsToggle')}
-        data-testid="chat-skills-trigger"
+        data-testid="chat-panel-skill-select-trigger"
       >
         <span className="chat-mode-select__value">
           <span className="chat-mode-select__icon" aria-hidden="true">
@@ -3222,9 +3270,9 @@ function SkillSelector({ onNavigateToSkills, onInsertSkill, onRemoveSkill }: {
       </button>
 
       {isOpen && (
-        <div className="chat-skill-select__menu" role="menu">
+        <div className="chat-skill-select__menu" role="menu" data-testid="chat-panel-skill-select-menu">
           {/* 顶部搜索框 */}
-          <div className="chat-skill-select__search">
+          <div className="chat-skill-select__search" data-testid="chat-panel-skill-select-search">
             <svg className="chat-skill-select__search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM17.5 17.5l-3.7-3.7" />
             </svg>
@@ -3234,25 +3282,25 @@ function SkillSelector({ onNavigateToSkills, onInsertSkill, onRemoveSkill }: {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('chat.skillsSearchPlaceholder')}
               className="chat-skill-select__search-input"
-              data-testid="chat-skills-search"
+              data-testid="chat-panel-skill-select-search-input"
             />
           </div>
 
           {loading && (
-            <div className="chat-skill-select__state">{t('skills.detailLoading')}</div>
+            <div className="chat-skill-select__state" data-testid="chat-panel-skill-select-state" data-variant="loading">{t('skills.detailLoading')}</div>
           )}
           {!loading && errorMessage && (
-            <div className="chat-skill-select__state">{errorMessage}</div>
+            <div className="chat-skill-select__state" data-testid="chat-panel-skill-select-state" data-variant="error">{errorMessage}</div>
           )}
           {!loading && !errorMessage && installedSkills.length === 0 && (
-            <div className="chat-skill-select__state">{t('chat.noInstalledSkills')}</div>
+            <div className="chat-skill-select__state" data-testid="chat-panel-skill-select-state" data-variant="no-installed">{t('chat.noInstalledSkills')}</div>
           )}
           {!loading && !errorMessage && installedSkills.length > 0 && filteredSkills.length === 0 && (
-            <div className="chat-skill-select__state">{t('skills.noMatches')}</div>
+            <div className="chat-skill-select__state" data-testid="chat-panel-skill-select-state" data-variant="no-matches">{t('skills.noMatches')}</div>
           )}
           {!loading && !errorMessage && filteredSkills.length > 0 && (
             <>
-              <div className="chat-skill-select__list">
+              <div className="chat-skill-select__list" data-testid="chat-panel-skill-select-list">
                 {filteredSkills.map((skill) => {
                   const avatar = getSkillAvatar(skill.name);
                   const isSelected = selectedSkills.includes(skill.name);
@@ -3266,14 +3314,16 @@ function SkillSelector({ onNavigateToSkills, onInsertSkill, onRemoveSkill }: {
                         isSelected && 'chat-skill-select__item--selected',
                       )}
                       aria-pressed={isSelected}
+                      data-testid="chat-panel-skill-select-item"
+                      data-variant={skill.name}
                       title={isSelected ? t('chat.skillsRemove') : t('chat.skillsAdd')}
                     >
-                      <div className={`chat-skill-select__avatar ${avatar.color}`}>
+                      <div className={`chat-skill-select__avatar ${avatar.color}`} data-testid="chat-panel-skill-select-item-avatar">
                         {avatar.firstChar}
                       </div>
-                      <div className="chat-skill-select__item-main">
-                        <div className="chat-skill-select__item-name">{skill.display_name || skill.name}</div>
-                        <div className="chat-skill-select__item-desc">
+                      <div className="chat-skill-select__item-main" data-testid="chat-panel-skill-select-item-main">
+                        <div className="chat-skill-select__item-name" data-testid="chat-panel-skill-select-item-name">{skill.display_name || skill.name}</div>
+                        <div className="chat-skill-select__item-desc" data-testid="chat-panel-skill-select-item-desc">
                           {skill.description || t('skills.noDescription')}
                         </div>
                       </div>
@@ -3290,12 +3340,12 @@ function SkillSelector({ onNavigateToSkills, onInsertSkill, onRemoveSkill }: {
           )}
 
           {/* 底部「技能管理」入口 */}
-          <div className="chat-skill-select__footer">
+          <div className="chat-skill-select__footer" data-testid="chat-panel-skill-select-footer">
             <button
               type="button"
               onClick={handleOpenSkillsPage}
               className="chat-skill-select__manage-btn"
-              data-testid="chat-skills-manage"
+              data-testid="chat-panel-skill-select-manage"
             >
               <span className="chat-config-icon chat-config-icon--settings chat-skill-select__manage-icon" aria-hidden="true" />
               <span>{t('chat.skillsManage')}</span>

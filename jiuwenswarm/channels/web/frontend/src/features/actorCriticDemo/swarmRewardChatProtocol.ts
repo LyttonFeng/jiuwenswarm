@@ -22,6 +22,19 @@ export function isTerminal(run: RewardRun): boolean {
   return ['completed', 'failed', 'cancelled'].includes(run.status);
 }
 
+function rewardPackBoundary(run: RewardRun): string {
+  const construction = run.rewardpack.construction.successful_witness_used
+    ? 'Builder 使用成功 witness；witness 不对 Actor/Critic 可见'
+    : 'Builder 从当前任务证据 fresh construction';
+  const hiddenTests = run.rewardpack.boundary.hidden_tests_used
+    ? '使用了 hidden tests'
+    : '未使用 hidden tests';
+  const graderFeedback = run.rewardpack.boundary.official_grader_feedback_used
+    ? '使用了官方 grader feedback'
+    : '未使用官方 grader feedback';
+  return `${construction}；${hiddenTests}；${graderFeedback}。`;
+}
+
 export function stageResult(run: RewardRun, stage: Stage): string {
   if (run.status === 'cancelled' && run.phase === stage) {
     if (stage === 'actor') {
@@ -109,9 +122,7 @@ export function finalSummary(run: RewardRun): string {
   const verdict = run.grader.complete
     ? `**${run.grader.resolved}/1 resolved**`
     : `运行状态：**${run.status}**`;
-  const packBoundary = run.pack_mode === 'rebuild_gold_assisted'
-    ? 'Builder 使用 Gold；Actor 与 Critic 未看到 Gold。'
-    : 'RewardPack、Actor 与 Critic 均未使用 Gold。';
+  const packBoundary = rewardPackBoundary(run);
   const reviewedTurns = run.timeline.filter((event) => event.kind === 'actor_critic_turn').length;
   return [
     `任务 **${run.task.task_id}** 已结束，官方结果为 ${verdict}。`,
@@ -224,9 +235,7 @@ export function rewardPackContent(run: RewardRun): string {
       .join('，');
     return `- ${probe.admitted ? '✅' : '⚠️'} **${probe.id}** · ${probe.verification_mode || 'unknown'}\n  ${probe.description}${matrix ? `（${matrix}）` : ''}`;
   }).join('\n');
-  const boundary = pack.boundary.teacher_gold_access
-    ? 'Gold-assisted Builder；Actor/Critic 无 Gold；未使用 hidden tests'
-    : 'Answer-blind Builder/Actor/Critic；未使用 hidden tests';
+  const boundary = rewardPackBoundary(run);
   return [
     `## RewardPack · ${run.task.task_id}`,
     '',
@@ -254,17 +263,15 @@ export function progressStatus(run: RewardRun): string {
 
 function actorCriticExplanation(run: RewardRun): string {
   const reviewed = run.timeline.filter((event) => event.kind === 'actor_critic_turn');
-  const valued = reviewed.filter((event) => event.metrics?.state_value != null);
+  const valued = reviewed.filter((event) => event.metrics?.actor_success_value != null);
   const interventions = reviewed.filter((event) => event.decision === 'speak');
   const valueRows = valued.map((event) => {
     const metrics = event.metrics!;
     const turn = event.title.match(/Turn (\d+)/)?.[1] || '?';
     const number = (value: number | null) => value === null ? '—' : value.toFixed(3);
-    return `| ${turn} | ${number(metrics.state_value)} | ${number(metrics.actor_q)} | ${number(metrics.revision_q)} | ${number(metrics.intervention_gain)} | ${event.decision || 'silent'} |`;
+    return `| ${turn} | ${number(metrics.actor_success_value)} | ${number(metrics.revision_success_value)} | ${number(metrics.counterfactual_advantage)} | ${number(metrics.intervention_threshold)} | ${event.decision || 'silent'} |`;
   }).join('\n');
-  const boundary = run.rewardpack.boundary.teacher_gold_access
-    ? 'Builder 可见 Gold；冻结后 Actor 与 Critic 不可见 Gold；未使用 hidden tests。'
-    : 'Builder、Actor 与 Critic 均 answer-blind；未使用 hidden tests。';
+  const boundary = rewardPackBoundary(run);
   const grader = run.grader.complete
     ? `${run.grader.resolved}/1 resolved，${run.grader.unresolved} unresolved，${run.grader.errors} error`
     : '尚未完成';
@@ -278,9 +285,9 @@ function actorCriticExplanation(run: RewardRun): string {
     '',
     '1. Actor 从当前状态 $s_t$ 产生一个**尚未执行**的真实工具动作 $a_t$。状态只包含公开 issue、冻结 RewardPack、当前 worktree 与已经执行的可见证据。',
     '2. 只读低风险动作可由语义 Router 快速放行；需要审阅的动作交给 Proposer 产生一个 grounded revision $\\tilde a_t$。',
-    '3. 独立 Value Critic 从同一个 $s_t$ 评价：$V(s_t)$、$Q(s_t,a_t)$ 与 $Q(s_t,\\tilde a_t)$。候选顺序被盲化，Critic 不知道哪一个来自 Actor。',
-    '4. Controller 不计算单动作 advantage；它只比较同一状态下两个候选的成本调整效用：$G_t=U(s_t,\\tilde a_t)-U(s_t,a_t)$。revision 还必须可执行、repo-grounded，并与 RewardPack 要求的条件和边界相容。',
-    '5. 若合同有效且干预收益 $G_t$ 超过阈值，Controller **speak**：丢弃原 pending action，只注入当前 fresh hint，让同一 Actor 重新采样；否则 **silent**：原动作不变地执行。',
+    '3. Environment Gate 优先在一次性沙箱中物化候选并重放 frozen probes；不可物化的动作由 Transition 预测后继 Reward Machine 状态。Transition 在算法上只负责状态转移，不负责价值判断。',
+    '4. Value Critic 再基于两个后继状态估计 $V(next\\mid Actor)$ 与 $V(next\\mid Revision)$。工程实现把 Transition 与 Value 结构化批处理在一次模型请求中，避免重复上下文，但保留两种输出的语义边界。确定性环境事实先做 dominance；只有环境状态不可比时，Controller 才使用 $A_{cf}=V(next\\mid Revision)-V(next\\mid Actor)$。',
+    '5. 环境发现 required criterion 回归会直接 veto；否则 revision 确定性支配 Actor，或 $A_{cf}$ 超过阈值 0.01 时，Controller **speak**。其余情况 **silent**，原动作不变地执行。',
     '6. 工具结果成为 $s_{t+1}$ 的新证据。模型 reasoning 在本次调用后丢弃，不进入 Actor 历史、RewardPack 或网页。',
     '',
     '### 本次真实运行',
@@ -294,7 +301,7 @@ function actorCriticExplanation(run: RewardRun): string {
     ...(valueRows ? [
       '### 有完整价值估计的回合',
       '',
-      '| Turn | V(s) | Q(actor) | Q(revision) | intervention gain | decision |',
+      '| Turn | V(next｜Actor) | V(next｜Revision) | A_cf | threshold | decision |',
       '|---:|---:|---:|---:|---:|:---|',
       valueRows,
       '',
