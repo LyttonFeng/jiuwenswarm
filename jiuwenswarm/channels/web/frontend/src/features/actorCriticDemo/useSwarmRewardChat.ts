@@ -300,13 +300,9 @@ export function useSwarmRewardChat(
         id: welcomeId,
         role: 'assistant',
         timestamp: timestamp(),
-        content: presentation === 'code_normal_baseline' ? [
-          '**JiuwenSwarm Code Normal 已就绪。**',
-          '',
-          '这是单一 DSV4-Flash Actor 的 baseline 运行视图，不加载 RewardPack，也不启用 Critic。',
-          '',
-          '页面只展示远端 SWE 沙箱中的真实工具轨迹和官方 grader 结果。',
-        ].join('\n') : [
+        content: presentation === 'code_normal_baseline'
+          ? '你好，我是 JiuwenSwarm。代码环境已经准备好了，你可以直接告诉我需要解决什么问题。'
+          : [
           '**Swarm Reward Coding Agent 已就绪。**',
           '',
           '告诉我你想解决的仓库 issue。系统会优先载入已认证的冻结 RewardPack，再启动 Actor-Critic。',
@@ -337,23 +333,16 @@ export function useSwarmRewardChat(
           throw new Error('该链接不是 Code Normal baseline 运行');
         }
         setSelectedTask(next.task);
-        if (presentation !== 'code_normal_baseline') setRun(next);
-        addMessage('assistant', presentation === 'code_normal_baseline' ? [
-          `已选择 **${next.task.task_id}** 的 Code Normal baseline。`,
-          '',
-          '- Actor：DSV4-Flash（单 Agent）',
-          '- RewardPack：未启用',
-          '- Critic：未启用',
-          '- 执行方式：收到解题命令后，现场启动新的 SWE 沙箱运行',
-          '',
-          `请输入：**解决 ${next.task.task_id.replace('__', '-')} 任务**。`,
-        ].join('\n') : [
-          `已载入 **${next.task.task_id}** 的真实运行上下文。`,
-          '',
-          '你可以直接提问，JiuwenSwarm 会结合冻结 RewardPack、Actor–Critic 轨迹、最终补丁和官方 grader 证据实时回答。',
-          '',
-          '例如：**这个任务为什么难？**、**Critic 为什么介入？**、**最终改了什么？**。只有你明确要求“展示轨迹”时，才会展开完整历史回放。',
-        ].join('\n'));
+        if (presentation !== 'code_normal_baseline') {
+          setRun(next);
+          addMessage('assistant', [
+            `已载入 **${next.task.task_id}** 的真实运行上下文。`,
+            '',
+            '你可以直接提问，JiuwenSwarm 会结合冻结 RewardPack、Actor–Critic 轨迹、最终补丁和官方 grader 证据实时回答。',
+            '',
+            '例如：**这个任务为什么难？**、**Critic 为什么介入？**、**最终改了什么？**。只有你明确要求“展示轨迹”时，才会展开完整历史回放。',
+          ].join('\n'));
+        }
       })
       .catch((reason) => {
         replayedRunRef.current = null;
@@ -436,7 +425,8 @@ export function useSwarmRewardChat(
       addMessage('user', trimmed, mediaItems);
       useChatStore.getState().setProcessing(sessionId, true);
       useChatStore.getState().setThinking(sessionId, true);
-      addMessage('assistant', '正在创建新的 SWE 沙箱并启动 DSV4-Flash Code Normal。后续工具动作会按实际发生时间实时出现，任务结束后才运行官方 grader。');
+      const taskName = run?.task.task_id || selectedTask?.task_id || '这个任务';
+      addMessage('assistant', `好的，我现在开始解决 **${taskName}**。我会先查看代码和相关测试，再进行修改；完成后会运行官方评测并告诉你结果。`);
       try {
         const pinned = run?.operation === 'baseline' ? run : await loadRewardRun(initialRunId);
         const next = await startCodeNormalBaseline(pinned.task.task_id);
