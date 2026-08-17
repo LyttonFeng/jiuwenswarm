@@ -14,6 +14,9 @@ Each turn first passes through a small, non-reasoning semantic router:
 - Demo control/status intent stays in the Swarm Reward controller. The model only
   classifies the turn; deterministic code owns process start, cancellation, and
   evidence projection.
+- Routing is atomic and fail-closed: only an explicit `general` result falls
+  through to the normal Agent. An unavailable Demo service cannot silently turn
+  a RewardPack query into repository tool execution.
 - Query intents are side-effect free. Only explicit start, build, and cancel
   intents may change remote execution state.
 - Everything else falls through unchanged to JiuwenSwarm's normal Agent path.

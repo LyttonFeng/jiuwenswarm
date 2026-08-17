@@ -27,6 +27,7 @@ import {
   stageResult,
   type Stage,
 } from './swarmRewardChatProtocol';
+import { resolveSwarmRewardSubmitRoute } from './swarmRewardSubmitRouting';
 import type { PackMode, RewardRun, RewardTaskPreset, RewardTimelineEvent } from './types';
 
 const POLL_INTERVAL_MS = 1_500;
@@ -349,9 +350,23 @@ export function useSwarmRewardChat(
   const send = useCallback(async (content: string, mediaItems?: MediaItem[]) => {
     const trimmed = content.trim();
     if (!enabled || !trimmed) return false;
-    let handled = false;
+    const submission = await resolveSwarmRewardSubmitRoute(() => routeRewardMessage(trimmed, {
+      selected_task_id: run?.task.task_id || selectedTask?.task_id || null,
+      active_run: run ? {
+        run_id: run.run_id,
+        status: run.status,
+        phase: run.phase,
+      } : null,
+    }));
+    if (submission.kind === 'general') return false;
+
     let keepProcessing = Boolean(run && !isTerminal(run));
     addMessage('user', trimmed, mediaItems);
+    if (submission.kind === 'unavailable') {
+      addMessage('system', `Swarm Reward 路由服务未连接；本条消息没有交给普通 Agent 执行：${submission.error instanceof Error ? submission.error.message : String(submission.error)}`);
+      return true;
+    }
+
     useChatStore.getState().setProcessing(sessionId, true);
     useChatStore.getState().setThinking(sessionId, true);
 
@@ -364,17 +379,7 @@ export function useSwarmRewardChat(
         availableRuns = catalog.recentRuns;
       }
 
-      const route = await routeRewardMessage(trimmed, {
-        selected_task_id: run?.task.task_id || selectedTask?.task_id || null,
-        active_run: run ? {
-          run_id: run.run_id,
-          status: run.status,
-          phase: run.phase,
-        } : null,
-      });
-      if (route.scope === 'general') return false;
-
-      handled = true;
+      const route = submission.route;
       if (route.intent === 'environment_status') {
         addMessage('assistant', environmentStatus(await loadRewardEnvironment()));
         return true;
@@ -514,10 +519,6 @@ export function useSwarmRewardChat(
         : `我还不能确定你指的是哪项 Demo 任务。当前可用任务：${availableTasks.map((item) => `\`${item.task_id}\``).join('、')}。`);
       return true;
     } catch (reason) {
-      if (!handled) {
-        console.warn('Swarm Reward semantic router unavailable; using normal Jiuwen agent.', reason);
-        return false;
-      }
       addMessage('system', `Demo 执行服务尚未就绪：${reason instanceof Error ? reason.message : String(reason)}`);
       return true;
     } finally {
