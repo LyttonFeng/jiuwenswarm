@@ -28,7 +28,10 @@ import {
   stageResult,
   type Stage,
 } from './swarmRewardChatProtocol';
-import { resolveSwarmRewardSubmitRoute } from './swarmRewardSubmitRouting';
+import {
+  isCodeNormalReplayRequest,
+  resolveSwarmRewardSubmitRoute,
+} from './swarmRewardSubmitRouting';
 import type { PackMode, RewardRun, RewardTaskPreset, RewardTimelineEvent } from './types';
 
 const POLL_INTERVAL_MS = 1_500;
@@ -415,6 +418,24 @@ export function useSwarmRewardChat(
     const trimmed = content.trim();
     if (!enabled || !trimmed) return false;
     pendingAgentContextRef.current = null;
+    if (
+      presentation === 'code_normal_baseline'
+      && initialRunId
+      && isCodeNormalReplayRequest(trimmed)
+    ) {
+      addMessage('user', trimmed, mediaItems);
+      useChatStore.getState().setProcessing(sessionId, true);
+      useChatStore.getState().setThinking(sessionId, true);
+      addMessage('assistant', '正在按原始顺序回放这次 Code Normal baseline 的真实工具轨迹。最后会显示官方 grader 结果。');
+      try {
+        await replayRun(await loadRewardRun(run?.operation === 'baseline' ? run.run_id : initialRunId));
+      } catch (reason) {
+        useChatStore.getState().setProcessing(sessionId, false);
+        useChatStore.getState().setThinking(sessionId, false);
+        addMessage('system', `Code Normal 轨迹载入失败：${reason instanceof Error ? reason.message : String(reason)}`);
+      }
+      return true;
+    }
     const submission = await resolveSwarmRewardSubmitRoute(() => routeRewardMessage(trimmed, {
       selected_task_id: run?.task.task_id || selectedTask?.task_id || null,
       active_run: run ? {

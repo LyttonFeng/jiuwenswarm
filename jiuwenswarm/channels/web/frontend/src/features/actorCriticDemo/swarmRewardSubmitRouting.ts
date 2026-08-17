@@ -21,3 +21,14 @@ export async function resolveSwarmRewardSubmitRoute(
     return { kind: 'unavailable', error };
   }
 }
+
+/**
+ * The Code Normal replay page is already bound to one baseline task/run.
+ * Starting that replay must not depend on the Swarm Reward semantic router.
+ */
+export function isCodeNormalReplayRequest(message: string): boolean {
+  const namesTask = /django(?:[\s_-]*django)?[\s_-]*\d+/i.test(message);
+  const asksToRun = /解决|求解|开始|执行|运行/.test(message)
+    || /\b(?:solve|start|run)\b/i.test(message);
+  return namesTask && asksToRun;
+}
