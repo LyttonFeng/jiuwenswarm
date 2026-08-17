@@ -509,6 +509,10 @@ export function useSwarmRewardChat(
       }
 
       if (route.intent === 'replay_run') {
+        if (presentation === 'code_normal_baseline' && run?.operation === 'baseline') {
+          replayRun(await loadRewardRun(run.run_id));
+          return true;
+        }
         if (!task) {
           addMessage('assistant', '请告诉我想查看哪项任务的演示运行。');
           return true;
