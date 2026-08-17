@@ -289,9 +289,12 @@ function AppContent() {
   const { t, i18n } = useTranslation();
   const { route, navigate } = useChatRoute();
   const tRef = useRef(t);
-  const isSwarmRewardMode = new URLSearchParams(window.location.search).get('mode') === 'swarm-reward';
-  const swarmRewardRouteSearch = isSwarmRewardMode ? '?mode=swarm-reward' : undefined;
-  const swarmRewardInitialRunId = isSwarmRewardMode
+  const demoMode = new URLSearchParams(window.location.search).get('mode');
+  const isSwarmRewardMode = demoMode === 'swarm-reward';
+  const isCodeNormalBaselineMode = demoMode === 'code-normal-baseline';
+  const isEvidenceRunMode = isSwarmRewardMode || isCodeNormalBaselineMode;
+  const swarmRewardRouteSearch = isEvidenceRunMode ? `?mode=${demoMode}` : undefined;
+  const swarmRewardInitialRunId = isEvidenceRunMode
     ? new URLSearchParams(window.location.search).get('run')
     : null;
   // 优先使用存储的会话 ID，避免每次刷新创建新会话
@@ -299,7 +302,12 @@ function AppContent() {
     if (route.kind === 'chat-session') return route.sessionId;
     return 'new';
   });
-  const swarmRewardChat = useSwarmRewardChat(isSwarmRewardMode, sessionId, swarmRewardInitialRunId);
+  const swarmRewardChat = useSwarmRewardChat(
+    isEvidenceRunMode,
+    sessionId,
+    swarmRewardInitialRunId,
+    isCodeNormalBaselineMode ? 'code_normal_baseline' : 'swarm_reward',
+  );
 
   const [activeNav, setActiveNav] = useState<MainNavKey>('chat');
   const [serverConfig, setServerConfig] = useState<Record<string, unknown> | null>(null);
@@ -1788,7 +1796,7 @@ function AppContent() {
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) return;
     let agentContext: string | null = null;
-    if (isSwarmRewardMode) {
+    if (isEvidenceRunMode) {
       const handled = await swarmRewardChat.send(content, mediaItems);
       if (handled) return;
       agentContext = swarmRewardChat.takeAgentContext();
@@ -1909,7 +1917,7 @@ function AppContent() {
     } else {
       useChatStore.getState().setInputValue(currentSessionId, content);
     }
-  }, [disposeInFlightHistoryHandles, isSwarmRewardMode, mode, navigate, request, sendMessage, setGoalObjective, swarmRewardChat, swarmRewardRouteSearch, t]);
+  }, [disposeInFlightHistoryHandles, isEvidenceRunMode, mode, navigate, request, sendMessage, setGoalObjective, swarmRewardChat, swarmRewardRouteSearch, t]);
 
   const handlePersistMedia = useCallback((content: string, mediaItems: MediaItem[]) => {
     const currentSessionId = sessionIdRef.current;
@@ -1939,7 +1947,7 @@ function AppContent() {
   }, [sendStructuredChatContent]);
 
   const handleInterrupt = useCallback((newInput?: string) => {
-    if (isSwarmRewardMode) {
+    if (isEvidenceRunMode) {
       if (newInput?.trim()) void swarmRewardChat.send(newInput);
       return;
     }
@@ -1948,10 +1956,10 @@ function AppContent() {
     const trimmed = newInput?.trim();
     if (!trimmed) return;
     void supplement(currentSessionId, trimmed);
-  }, [isSwarmRewardMode, supplement, swarmRewardChat]);
+  }, [isEvidenceRunMode, supplement, swarmRewardChat]);
 
   const handleCancel = useCallback(() => {
-    if (isSwarmRewardMode) {
+    if (isEvidenceRunMode) {
       void swarmRewardChat.cancel();
       return;
     }
@@ -1974,7 +1982,7 @@ function AppContent() {
     }
     void cancel(currentSessionId);
     if (isGoalActive) void pauseGoal(currentSessionId);
-  }, [cancel, isSwarmRewardMode, mode, pause, pauseGoal, swarmRewardChat]);
+  }, [cancel, isEvidenceRunMode, mode, pause, pauseGoal, swarmRewardChat]);
 
   /**
    * 删除目标：active 时除了清目标，还要顺带结束当前会话输出——复用停止按钮同一套中断调用
@@ -2453,15 +2461,15 @@ function AppContent() {
                       onInterrupt={handleInterrupt}
                       onCancel={handleCancel}
                       onSwitchMode={handleSwitchMode}
-                      fixedModeLabel={isSwarmRewardMode ? 'Swarm Reward 模式' : undefined}
-                      defaultCompletedWorkExpanded={isSwarmRewardMode}
+                      fixedModeLabel={isSwarmRewardMode ? 'Swarm Reward 模式' : isCodeNormalBaselineMode ? 'Code Normal' : undefined}
+                      defaultCompletedWorkExpanded={isEvidenceRunMode}
                       isProcessing={isProcessing}
                       onUserAnswer={handleUserAnswer}
                       onExportShare={handleExportShare}
                       isExportingShare={isExportingShare}
                       canExportShare={Boolean(sessionId && sessionId !== NEW_CONVERSATION_ID && (!isProcessing || isPaused))}
-                      sessionTitle={isSwarmRewardMode ? 'Swarm Reward Coding Agent' : sessionTitle}
-                      sessionProjectName={isSwarmRewardMode ? (swarmRewardChat.activeTaskId || '远端 SWE 工作区') : sessionProjectName}
+                      sessionTitle={isSwarmRewardMode ? 'Swarm Reward Coding Agent' : isCodeNormalBaselineMode ? 'JiuwenSwarm Code Normal' : sessionTitle}
+                      sessionProjectName={isEvidenceRunMode ? (swarmRewardChat.activeTaskId || '远端 SWE 工作区') : sessionProjectName}
                       sessionProject={sessionProject}
                       teamAreaExpanded={isTeamAreaExpanded}
                       autoFocusKey={composerFocusKey}

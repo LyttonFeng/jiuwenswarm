@@ -135,7 +135,7 @@ export interface RewardRun {
   run_id: string;
   task: RewardTaskPreset;
   pack_mode: PackMode;
-  operation?: 'build_rewardpack' | 'solve';
+  operation?: 'baseline' | 'build_rewardpack' | 'solve';
   rewardpack_source_run_id?: string | null;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   phase: 'queued' | 'workspace' | 'rewardpack' | 'actor' | 'grader' | 'complete';

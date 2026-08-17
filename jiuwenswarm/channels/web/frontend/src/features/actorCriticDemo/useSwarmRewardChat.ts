@@ -34,6 +34,8 @@ import type { PackMode, RewardRun, RewardTaskPreset, RewardTimelineEvent } from 
 const POLL_INTERVAL_MS = 1_500;
 const WELCOME_MESSAGE_ID = 'swarm-reward-welcome';
 
+export type RewardRunPresentation = 'swarm_reward' | 'code_normal_baseline';
+
 type Progress = {
   runId: string;
   activeStage: Stage | null;
@@ -80,6 +82,7 @@ export function useSwarmRewardChat(
   enabled: boolean,
   sessionId: string,
   initialRunId: string | null = null,
+  presentation: RewardRunPresentation = 'swarm_reward',
 ): SwarmRewardChatController {
   const [tasks, setTasks] = useState<RewardTaskPreset[]>([]);
   const [recentRuns, setRecentRuns] = useState<RewardRun[]>([]);
@@ -138,12 +141,15 @@ export function useSwarmRewardChat(
     const progress = progressRef.current;
     if (!progress || progress.activeStage === stage || progress.completedStages.has(stage)) return;
     if (progress.activeStage) completeStage(progress.activeStage, next);
-    const label = stage === 'rewardpack' && next.rewardpack_source_run_id
+    const baseline = next.operation === 'baseline';
+    const label = baseline && stage === 'actor'
+      ? 'Code Normal 独立解题'
+      : stage === 'rewardpack' && next.rewardpack_source_run_id
       ? '校验并载入已认证 RewardPack'
       : STAGE_LABELS[stage];
     const toolCall: ToolCall = {
       id: `${next.run_id}-${stage}`,
-      name: TOOL_NAMES[stage],
+      name: baseline && stage === 'actor' ? 'jiuwenswarm.code_normal' : TOOL_NAMES[stage],
       display_name: label,
       arguments: {
         task_id: next.task.task_id,
@@ -240,9 +246,12 @@ export function useSwarmRewardChat(
         : '下面回放一条**在官方评分前结束**的真实运行记录。它不是新的模型采样。';
     addMessage('assistant', replayBoundary);
     const terminalStageIndex = STAGES.indexOf(next.phase as Stage);
-    const replayStages = isTerminal(next) && next.status !== 'completed' && terminalStageIndex >= 0
-      ? STAGES.slice(0, terminalStageIndex + 1)
+    const availableStages = next.operation === 'baseline'
+      ? STAGES.filter((stage) => stage !== 'rewardpack')
       : STAGES;
+    const replayStages = isTerminal(next) && next.status !== 'completed' && terminalStageIndex >= 0
+      ? availableStages.filter((stage) => STAGES.indexOf(stage) <= terminalStageIndex)
+      : availableStages;
     for (const stage of replayStages) {
       openStage(stage, next);
       completeStage(stage, next);
@@ -257,13 +266,22 @@ export function useSwarmRewardChat(
     const store = useChatStore.getState();
     store.ensureRuntime(sessionId);
     store.setActiveSessionId(sessionId);
-    const hasWelcome = store.getRuntime(sessionId)?.messages.some((message) => message.id === WELCOME_MESSAGE_ID);
+    const welcomeId = presentation === 'code_normal_baseline'
+      ? 'code-normal-baseline-welcome'
+      : WELCOME_MESSAGE_ID;
+    const hasWelcome = store.getRuntime(sessionId)?.messages.some((message) => message.id === welcomeId);
     if (!hasWelcome) {
       store.addMessage(sessionId, {
-        id: WELCOME_MESSAGE_ID,
+        id: welcomeId,
         role: 'assistant',
         timestamp: timestamp(),
-        content: [
+        content: presentation === 'code_normal_baseline' ? [
+          '**JiuwenSwarm Code Normal 已就绪。**',
+          '',
+          '这是单一 DSV4-Flash Actor 的 baseline 运行视图，不加载 RewardPack，也不启用 Critic。',
+          '',
+          '页面只展示远端 SWE 沙箱中的真实工具轨迹和官方 grader 结果。',
+        ].join('\n') : [
           '**Swarm Reward Coding Agent 已就绪。**',
           '',
           '告诉我你想解决的仓库 issue。系统会优先载入已认证的冻结 RewardPack，再启动 Actor-Critic。',
@@ -283,16 +301,28 @@ export function useSwarmRewardChat(
     return () => {
       active = false;
     };
-  }, [addMessage, enabled, ensureCatalog, sessionId]);
+  }, [addMessage, enabled, ensureCatalog, presentation, sessionId]);
 
   useEffect(() => {
     if (!enabled || !initialRunId || replayedRunRef.current === initialRunId) return;
     replayedRunRef.current = initialRunId;
     void loadRewardRun(initialRunId)
       .then((next) => {
+        if (presentation === 'code_normal_baseline' && next.operation !== 'baseline') {
+          throw new Error('该链接不是 Code Normal baseline 运行');
+        }
         setSelectedTask(next.task);
         setRun(next);
-        addMessage('assistant', [
+        addMessage('assistant', presentation === 'code_normal_baseline' ? [
+          `已载入 **${next.task.task_id}** 的真实 Code Normal baseline。`,
+          '',
+          '- Actor：DSV4-Flash（单 Agent）',
+          '- RewardPack：未启用',
+          '- Critic：未启用',
+          `- 官方 grader：${next.grader.complete ? `${next.grader.resolved}/1 resolved` : '未完成'}`,
+          '',
+          '你可以问：**它做了什么？**、**最终补丁是什么？**、**官方评分结果如何？**。',
+        ].join('\n') : [
           `已载入 **${next.task.task_id}** 的真实运行上下文。`,
           '',
           '你可以直接提问，JiuwenSwarm 会结合冻结 RewardPack、Actor–Critic 轨迹、最终补丁和官方 grader 证据实时回答。',
@@ -304,7 +334,7 @@ export function useSwarmRewardChat(
         replayedRunRef.current = null;
         addMessage('system', `无法载入运行 ${initialRunId}：${reason instanceof Error ? reason.message : String(reason)}`);
       });
-  }, [addMessage, enabled, initialRunId]);
+  }, [addMessage, enabled, initialRunId, presentation]);
 
   useEffect(() => {
     if (!enabled || !run || isTerminal(run)) return;
@@ -413,6 +443,15 @@ export function useSwarmRewardChat(
       }
 
       const route = submission.route;
+      if (
+        presentation === 'code_normal_baseline'
+        && (route.intent === 'start_run' || route.intent === 'build_rewardpack')
+      ) {
+        addMessage('assistant', run
+          ? finalSummary(run)
+          : '这个入口只展示已冻结的 Code Normal baseline，不会启动 RewardPack 或 Actor-Critic。');
+        return true;
+      }
       if (route.intent === 'environment_status') {
         addMessage('assistant', environmentStatus(await loadRewardEnvironment()));
         return true;
@@ -560,7 +599,7 @@ export function useSwarmRewardChat(
         useChatStore.getState().setThinking(sessionId, false);
       }
     }
-  }, [addMessage, beginBuild, beginFromPack, beginRun, enabled, ensureCatalog, publishRun, recentRuns, replayRun, run, selectedTask, sessionId, tasks]);
+  }, [addMessage, beginBuild, beginFromPack, beginRun, enabled, ensureCatalog, presentation, publishRun, recentRuns, replayRun, run, selectedTask, sessionId, tasks]);
 
   const cancelRun = useCallback(async () => {
     if (!run || isTerminal(run)) return;

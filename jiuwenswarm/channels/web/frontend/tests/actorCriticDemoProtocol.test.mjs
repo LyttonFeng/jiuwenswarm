@@ -110,3 +110,37 @@ test('agent Q&A context exposes verified run evidence without a witness body', (
   assert.match(context, /successful witness may have been used/);
   assert.doesNotMatch(context, /successful-witness\.patch|gold patch/i);
 });
+
+test('Code Normal baseline is reported without RewardPack or Critic claims', () => {
+  const baseline = {
+    ...runFixture(),
+    operation: 'baseline',
+    rewardpack: {
+      ...runFixture().rewardpack,
+      available: false,
+      verified: false,
+      probe_count: 0,
+      passed: 0,
+      criteria: [],
+      probes: [],
+    },
+    actor: {
+      ...runFixture().actor,
+      turns_reviewed: 0,
+      interventions: 0,
+      tool_calls: 42,
+    },
+    grader: { available: true, complete: true, resolved: 0, unresolved: 1, errors: 0 },
+    timeline: [],
+  };
+  const summary = finalSummary(baseline);
+  assert.match(summary, /Code Normal baseline/);
+  assert.match(summary, /RewardPack：未启用/);
+  assert.match(summary, /Critic：未启用/);
+  assert.match(summary, /0\/1 resolved/);
+
+  const context = agentContextForRun(baseline);
+  assert.match(context, /<code_normal_baseline_context>/);
+  assert.match(context, /no RewardPack; no Critic/);
+  assert.doesNotMatch(context, /<swarm_reward_run_context>/);
+});
