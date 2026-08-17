@@ -252,6 +252,21 @@ export function useSwarmRewardChat(
         ? '下面回放一条**由用户停止、未进入官方 grader**的真实运行记录。它不是新的模型采样。'
         : '下面回放一条**在官方评分前结束**的真实运行记录。它不是新的模型采样。';
     addMessage('assistant', replayBoundary);
+    if (presentation === 'code_normal_baseline') {
+      openStage('workspace', next);
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+      openStage('actor', next);
+      for (const event of next.timeline || []) {
+        if (event.stage === 'grader' && progressRef.current?.activeStage !== 'grader') {
+          openStage('grader', next);
+        }
+        publishTimelineEvent(event, next);
+        await new Promise((resolve) => window.setTimeout(resolve, BASELINE_REPLAY_EVENT_DELAY_MS));
+      }
+      publishTerminal(next);
+      setRun(next);
+      return;
+    }
     const terminalStageIndex = STAGES.indexOf(next.phase as Stage);
     const availableStages = next.operation === 'baseline'
       ? STAGES.filter((stage) => stage !== 'rewardpack')
@@ -262,15 +277,9 @@ export function useSwarmRewardChat(
     for (const stage of replayStages) {
       openStage(stage, next);
       completeStage(stage, next);
-      if (presentation === 'code_normal_baseline') {
-        await new Promise((resolve) => window.setTimeout(resolve, 350));
-      }
     }
     for (const event of next.timeline || []) {
       publishTimelineEvent(event, next);
-      if (presentation === 'code_normal_baseline') {
-        await new Promise((resolve) => window.setTimeout(resolve, BASELINE_REPLAY_EVENT_DELAY_MS));
-      }
     }
     publishTerminal(next);
     setRun(next);
