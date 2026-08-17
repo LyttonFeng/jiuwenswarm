@@ -36,9 +36,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 function normalizeRun(run: RewardRun): RewardRun {
   return {
     ...run,
+    rewardpack: {
+      ...run.rewardpack,
+      harness: run.rewardpack.harness || {
+        registry_sha256: '',
+        execution: 'fresh networkless Docker replay',
+        executable_probes: run.rewardpack.probe_count || 0,
+      },
+    },
     actor: {
       ...run.actor,
       critic_errors: run.actor.critic_errors ?? 0,
+    },
+    comparison: run.comparison || {
+      available: false,
+      campaign_id: '',
+      headline: '',
+      a_value: null,
+      a_classification: '',
+      b_value: null,
+      b_classification: '',
+      online_actor_critic_seconds: 0,
+      official_grader_seconds: 0,
+      end_to_end_seconds: 0,
+      rewardpack_fingerprint_sha256: '',
+      policy_fingerprint_sha256: '',
+      official_grader: false,
     },
     timeline: run.timeline || [],
   };

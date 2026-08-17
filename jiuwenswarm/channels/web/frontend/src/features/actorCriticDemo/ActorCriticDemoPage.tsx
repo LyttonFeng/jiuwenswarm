@@ -69,6 +69,15 @@ function elapsed(run: RewardRun | null): string {
   return `${minutes} 分 ${String(seconds % 60).padStart(2, '0')} 秒`;
 }
 
+function formatDuration(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds));
+  return `${Math.floor(whole / 60)} 分 ${String(whole % 60).padStart(2, '0')} 秒`;
+}
+
+function shortHash(value: string): string {
+  return value ? `${value.slice(0, 10)}…${value.slice(-6)}` : '—';
+}
+
 function shortCommit(value: string): string {
   return value.slice(0, 10);
 }
@@ -198,6 +207,7 @@ export default function ActorCriticDemoPage() {
   const phaseIndex = run?.phase_index ?? -1;
   const running = run?.status === 'queued' || run?.status === 'running';
   const resolved = Boolean(run?.grader.complete && run.grader.resolved === 1);
+  const comparison = run?.comparison.available ? run.comparison : null;
 
   return (
     <div className="swarm-reward">
@@ -318,11 +328,36 @@ export default function ActorCriticDemoPage() {
                 <div className="swarm-reward__result-card">
                   <span>当前结果</span>
                   <strong className={resolved ? 'is-resolved' : run?.status === 'failed' ? 'is-failed' : ''}>
-                    {resolved ? '1 / 1 Resolved' : run?.status === 'failed' ? '运行失败' : running ? '正在求解' : '等待启动'}
+                    {comparison?.headline || (resolved ? '1 / 1 Resolved' : run?.status === 'failed' ? '运行失败' : running ? '正在求解' : '等待启动')}
                   </strong>
                   <small>{run ? `${run.actor.tool_calls} 次工具调用 · ${run.actor.interventions} 次 Critic 介入` : '尚未执行任何模型调用'}</small>
                 </div>
               </section>
+
+              {comparison ? (
+                <section className="swarm-reward__comparison" aria-label="A/B 官方结果">
+                  <div className="swarm-reward__comparison-arm is-baseline">
+                    <span>Baseline A · Actor only</span>
+                    <strong>A = {comparison.a_value}</strong>
+                    <small>健康运行 · 官方 grader 未解决</small>
+                  </div>
+                  <div className="swarm-reward__comparison-flow" aria-hidden="true">
+                    <ShieldCheck size={20} />
+                    <b>冻结 Pack + Online Actor–Critic</b>
+                    <span>{formatDuration(comparison.online_actor_critic_seconds)}</span>
+                  </div>
+                  <div className="swarm-reward__comparison-arm is-treatment">
+                    <span>Treatment B · 同一 Actor</span>
+                    <strong>B = {comparison.b_value}</strong>
+                    <small>官方 grader · 1/1 resolved</small>
+                  </div>
+                  <dl className="swarm-reward__comparison-timing">
+                    <div><dt>Actor–Critic</dt><dd>{formatDuration(comparison.online_actor_critic_seconds)}</dd></div>
+                    <div><dt>官方 Grader</dt><dd>{formatDuration(comparison.official_grader_seconds)}</dd></div>
+                    <div><dt>端到端</dt><dd>{formatDuration(comparison.end_to_end_seconds)}</dd></div>
+                  </dl>
+                </section>
+              ) : null}
 
               <section className="swarm-reward__launch">
                 <div className="swarm-reward__launch-copy">
@@ -447,6 +482,45 @@ export default function ActorCriticDemoPage() {
                   </button>
                 </aside>
               </div>
+
+              {run?.rewardpack.available ? (
+                <section className="swarm-reward__pack-board">
+                  <div className="swarm-reward__technical-head">
+                    <div>
+                      <span><DatabaseZap size={17} />RewardPack + HarnessPack</span>
+                      <small>冻结验收合同；Actor / Critic 不可见 successful witness 原文</small>
+                    </div>
+                    <span className="swarm-reward__verdict is-resolved">
+                      {run.rewardpack.passed}/{run.rewardpack.probe_count} admitted
+                    </span>
+                  </div>
+                  <div className="swarm-reward__pack-identities">
+                    <div><span>RewardPack</span><b>{shortHash(comparison?.rewardpack_fingerprint_sha256 || run.rewardpack.rewardpack_id)}</b></div>
+                    <div><span>Harness registry</span><b>{shortHash(run.rewardpack.harness.registry_sha256)}</b></div>
+                    <div><span>执行</span><b>{run.rewardpack.harness.execution}</b></div>
+                    <div><span>可执行 probes</span><b>{run.rewardpack.harness.executable_probes}</b></div>
+                  </div>
+                  <div className="swarm-reward__criteria-grid">
+                    {run.rewardpack.criteria.map((criterion) => (
+                      <article className={`is-${criterion.role}`} key={criterion.id}>
+                        <span>{criterion.role}</span>
+                        <h4>{criterion.id}</h4>
+                        <p>{criterion.question}</p>
+                        <small>{criterion.probe_ids.length} probes · {criterion.probe_ids.join(', ')}</small>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="swarm-reward__probe-list">
+                    {run.rewardpack.probes.map((probe) => (
+                      <div key={probe.id}>
+                        <CheckCircle2 size={15} />
+                        <span><b>{probe.id}</b><small>{probe.description}</small></span>
+                        <em>{probe.verification_mode || 'sandbox'}</em>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
 
               {showTechnical && run ? (
                 <div className="swarm-reward__technical-stack">

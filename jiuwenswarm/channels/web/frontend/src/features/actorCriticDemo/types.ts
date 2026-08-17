@@ -47,6 +47,11 @@ export interface RewardPackStatus {
     hidden_tests_used: boolean;
     official_grader_feedback_used: boolean;
   };
+  harness: {
+    registry_sha256: string;
+    execution: string;
+    executable_probes: number;
+  };
   criteria: Array<{
     id: string;
     role: 'terminal' | 'constraint' | 'shaping' | string;
@@ -110,6 +115,22 @@ export interface GraderStatus {
   errors: number;
 }
 
+export interface ComparisonStatus {
+  available: boolean;
+  campaign_id: string;
+  headline: string;
+  a_value: 0 | 1 | null;
+  a_classification: string;
+  b_value: 0 | 1 | null;
+  b_classification: string;
+  online_actor_critic_seconds: number;
+  official_grader_seconds: number;
+  end_to_end_seconds: number;
+  rewardpack_fingerprint_sha256: string;
+  policy_fingerprint_sha256: string;
+  official_grader: boolean;
+}
+
 export interface RewardRun {
   run_id: string;
   task: RewardTaskPreset;
@@ -130,6 +151,7 @@ export interface RewardRun {
   actor: ActorStatus;
   patch: PatchStatus;
   grader: GraderStatus;
+  comparison: ComparisonStatus;
   timeline: RewardTimelineEvent[];
 }
 
