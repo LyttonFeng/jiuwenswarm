@@ -302,15 +302,7 @@ export function useSwarmRewardChat(
         timestamp: timestamp(),
         content: presentation === 'code_normal_baseline'
           ? '你好，我是 JiuwenSwarm。代码环境已经准备好了，你可以直接告诉我需要解决什么问题。'
-          : [
-          '**Swarm Reward Coding Agent 已就绪。**',
-          '',
-          '告诉我你想解决的仓库 issue。系统会优先载入已认证的冻结 RewardPack，再启动 Actor-Critic。',
-          '',
-          '例如：`帮我解决 django__django-12325`。如果只想先看结果，可以说：`看看 12325 的演示运行`。',
-          '',
-          '如果没有可复用 Pack，Builder 可以使用成功 witness 重新构建；Actor 与 Critic 不可见 witness。',
-        ].join('\n'),
+          : '你好，我是 JiuwenSwarm。代码环境已经准备好了，你可以直接告诉我需要解决什么问题。',
       });
     }
     let active = true;
@@ -333,16 +325,7 @@ export function useSwarmRewardChat(
           throw new Error('该链接不是 Code Normal baseline 运行');
         }
         setSelectedTask(next.task);
-        if (presentation !== 'code_normal_baseline') {
-          setRun(next);
-          addMessage('assistant', [
-            `已载入 **${next.task.task_id}** 的真实运行上下文。`,
-            '',
-            '你可以直接提问，JiuwenSwarm 会结合冻结 RewardPack、Actor–Critic 轨迹、最终补丁和官方 grader 证据实时回答。',
-            '',
-            '例如：**这个任务为什么难？**、**Critic 为什么介入？**、**最终改了什么？**。只有你明确要求“展示轨迹”时，才会展开完整历史回放。',
-          ].join('\n'));
-        }
+        if (presentation !== 'code_normal_baseline') setRun(next);
       })
       .catch((reason) => {
         replayedRunRef.current = null;
@@ -397,11 +380,11 @@ export function useSwarmRewardChat(
     }
   }, [addMessage, publishRun, sessionId]);
 
-  const beginFromPack = useCallback(async (task: RewardTaskPreset, source: RewardRun) => {
+  const beginFromPack = useCallback(async (task: RewardTaskPreset, _source: RewardRun) => {
     setSelectedTask(task);
     useChatStore.getState().setProcessing(sessionId, true);
     useChatStore.getState().setThinking(sessionId, true);
-    addMessage('assistant', `RewardPack 已认证（**${source.rewardpack.passed}/${source.rewardpack.probe_count} probes**）。现在跳过 Builder，按内容哈希复用这份 Pack，直接启动 **Actor-Critic**。`);
+    addMessage('assistant', `好的，我现在开始解决 **${task.task_id}**。我会检查代码、验证关键修改，并在完成后运行官方评测。`);
     try {
       const next = await startActorCriticFromRewardPack(task.task_id);
       setRun(next);
