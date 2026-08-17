@@ -30,7 +30,7 @@ import {
   type Stage,
 } from './swarmRewardChatProtocol';
 import {
-  isCodeNormalReplayRequest,
+  isPinnedTaskSolveRequest,
   resolveSwarmRewardSubmitRoute,
 } from './swarmRewardSubmitRouting';
 import type { PackMode, RewardRun, RewardTaskPreset, RewardTimelineEvent } from './types';
@@ -387,6 +387,9 @@ export function useSwarmRewardChat(
     addMessage('assistant', `好的，我现在开始解决 **${task.task_id}**。我会检查代码、验证关键修改，并在完成后运行官方评测。`);
     try {
       const next = await startActorCriticFromRewardPack(task.task_id);
+      const url = new URL(window.location.href);
+      url.searchParams.set('run', next.run_id);
+      window.history.replaceState(window.history.state, '', url);
       setRun(next);
       publishRun(next);
     } catch (reason) {
@@ -401,9 +404,25 @@ export function useSwarmRewardChat(
     if (!enabled || !trimmed) return false;
     pendingAgentContextRef.current = null;
     if (
+      presentation === 'swarm_reward'
+      && initialRunId
+      && isPinnedTaskSolveRequest(trimmed)
+    ) {
+      addMessage('user', trimmed, mediaItems);
+      try {
+        const pinned = run || await loadRewardRun(initialRunId);
+        await beginFromPack(pinned.task, pinned);
+      } catch (reason) {
+        useChatStore.getState().setProcessing(sessionId, false);
+        useChatStore.getState().setThinking(sessionId, false);
+        addMessage('system', `任务启动失败：${reason instanceof Error ? reason.message : String(reason)}`);
+      }
+      return true;
+    }
+    if (
       presentation === 'code_normal_baseline'
       && initialRunId
-      && isCodeNormalReplayRequest(trimmed)
+      && isPinnedTaskSolveRequest(trimmed)
     ) {
       addMessage('user', trimmed, mediaItems);
       useChatStore.getState().setProcessing(sessionId, true);

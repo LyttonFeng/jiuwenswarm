@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  isCodeNormalReplayRequest,
+  isPinnedTaskSolveRequest,
   resolveSwarmRewardSubmitRoute,
 } from '../node_modules/.cache/swarm-reward-submit-routing/features/actorCriticDemo/swarmRewardSubmitRouting.js';
 
@@ -41,17 +41,17 @@ test('router failure is fail-closed instead of executing the normal Agent', asyn
   assert.equal(result.error, failure);
 });
 
-test('the pinned Code Normal solve command bypasses the Reward router', () => {
+test('a pinned Demo solve command bypasses the semantic router', () => {
   assert.equal(
-    isCodeNormalReplayRequest('解决 django-11790任务'),
+    isPinnedTaskSolveRequest('解决 django-11790任务'),
     true,
   );
   assert.equal(
-    isCodeNormalReplayRequest('帮我解释一下 RewardPack'),
+    isPinnedTaskSolveRequest('帮我解释一下 RewardPack'),
     false,
   );
   assert.equal(
-    isCodeNormalReplayRequest('django-11790 的 RewardPack 状态如何？'),
+    isPinnedTaskSolveRequest('django-11790 的 RewardPack 状态如何？'),
     false,
   );
 });

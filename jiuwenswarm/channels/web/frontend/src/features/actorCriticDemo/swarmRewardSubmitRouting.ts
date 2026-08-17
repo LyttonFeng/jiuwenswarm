@@ -23,10 +23,10 @@ export async function resolveSwarmRewardSubmitRoute(
 }
 
 /**
- * The Code Normal replay page is already bound to one baseline task/run.
- * Starting that replay must not depend on the Swarm Reward semantic router.
+ * A pinned Demo page already knows the task and execution mode.
+ * An explicit solve command must not depend on the semantic router.
  */
-export function isCodeNormalReplayRequest(message: string): boolean {
+export function isPinnedTaskSolveRequest(message: string): boolean {
   const namesTask = /django(?:[\s_-]*django)?[\s_-]*\d+/i.test(message);
   const asksToRun = /解决|求解|开始|执行|运行/.test(message)
     || /\b(?:solve|start|run)\b/i.test(message);
