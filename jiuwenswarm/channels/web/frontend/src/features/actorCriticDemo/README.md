@@ -36,9 +36,9 @@ If `请解决` is sent when a certified Pack already exists, the same reuse path
 used. The browser never chooses a server path or trusts a client-supplied Pack ID;
 the service resolves and validates the latest same-task Pack.
 
-This frozen-Pack path is the default leadership-demo path: it avoids a long live
-Builder run while preserving the real Actor-Critic sandbox execution, saved turn
-history, patch, and official grader result. `rebuild_fresh` and
+This frozen-Pack path is the default demo path: it avoids a long live Builder run
+while preserving the real Actor-Critic sandbox execution, saved turn history,
+patch, and official grader result. `rebuild_fresh` and
 `rebuild_with_successful_witness` remain explicit research/reproduction modes.
 
 The research model keeps Transition and Value as separate mathematical roles. The

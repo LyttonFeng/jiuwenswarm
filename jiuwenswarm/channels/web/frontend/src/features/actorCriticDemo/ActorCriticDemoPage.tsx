@@ -290,7 +290,10 @@ export default function ActorCriticDemoPage() {
             <h1>自进化 Coding 工作台</h1>
           </div>
           <div className="swarm-reward__top-actions">
-            <a className="swarm-reward__chat-link" href="/chat/new?mode=swarm-reward">
+            <a
+              className="swarm-reward__chat-link"
+              href={`/chat/new?mode=swarm-reward${run?.run_id ? `&run=${encodeURIComponent(run.run_id)}` : ''}`}
+            >
               <MessageCircle size={17} aria-hidden="true" />
               打开对话 Agent
             </a>
@@ -365,7 +368,6 @@ export default function ActorCriticDemoPage() {
                   <div>
                     <b>RewardPack 模式</b>
                     <span>{PACK_MODE_LABELS[packMode].description}</span>
-                    <span>领导现场演示优先从对话 Agent 复用已认证的冻结 Pack；这里保留完整重建入口。</span>
                   </div>
                 </div>
                 <label className="swarm-reward__mode-select">

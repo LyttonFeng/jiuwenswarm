@@ -254,7 +254,7 @@ export function useSwarmRewardChat(
         content: [
           '**Swarm Reward Coding Agent 已就绪。**',
           '',
-          '告诉我你想解决的仓库 issue。领导现场演示会优先载入已认证的冻结 RewardPack，再启动 Actor-Critic。',
+          '告诉我你想解决的仓库 issue。系统会优先载入已认证的冻结 RewardPack，再启动 Actor-Critic。',
           '',
           '例如：`帮我解决 django__django-12325`。如果只想先看结果，可以说：`看看 12325 的演示运行`。',
           '',
