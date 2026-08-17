@@ -302,7 +302,7 @@ export function useSwarmRewardChat(
         timestamp: timestamp(),
         content: presentation === 'code_normal_baseline'
           ? '你好，我是 JiuwenSwarm。代码环境已经准备好了，你可以直接告诉我需要解决什么问题。'
-          : '你好，我是 JiuwenSwarm。代码环境已经准备好了，你可以直接告诉我需要解决什么问题。',
+          : '你好，我是 JiuwenSwarm 的 Swarm Reward 模式。代码环境已经准备好了，你可以直接告诉我需要解决什么问题。',
       });
     }
     let active = true;
