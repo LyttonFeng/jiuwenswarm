@@ -120,6 +120,13 @@ export async function startActorCriticFromRewardPack(taskId: string): Promise<Re
   }));
 }
 
+export async function startCodeNormalBaseline(taskId: string): Promise<RewardRun> {
+  return normalizeRun(await request('/api/runs/baseline', {
+    method: 'POST',
+    body: JSON.stringify({ task_id: taskId }),
+  }));
+}
+
 export async function loadRewardRun(runId: string): Promise<RewardRun> {
   return normalizeRun(await request(`/api/runs/${encodeURIComponent(runId)}`));
 }

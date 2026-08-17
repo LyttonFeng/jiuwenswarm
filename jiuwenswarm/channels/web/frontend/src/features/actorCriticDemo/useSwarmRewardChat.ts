@@ -10,6 +10,7 @@ import {
   loadRewardTasks,
   routeRewardMessage,
   startActorCriticFromRewardPack,
+  startCodeNormalBaseline,
   startRewardPackBuild,
   startRewardRun,
 } from './api';
@@ -336,16 +337,16 @@ export function useSwarmRewardChat(
           throw new Error('该链接不是 Code Normal baseline 运行');
         }
         setSelectedTask(next.task);
-        setRun(next);
+        if (presentation !== 'code_normal_baseline') setRun(next);
         addMessage('assistant', presentation === 'code_normal_baseline' ? [
-          `已载入 **${next.task.task_id}** 的真实 Code Normal baseline。`,
+          `已选择 **${next.task.task_id}** 的 Code Normal baseline。`,
           '',
           '- Actor：DSV4-Flash（单 Agent）',
           '- RewardPack：未启用',
           '- Critic：未启用',
-          `- 官方 grader：${next.grader.complete ? `${next.grader.resolved}/1 resolved` : '未完成'}`,
+          '- 执行方式：收到解题命令后，现场启动新的 SWE 沙箱运行',
           '',
-          '你可以问：**它做了什么？**、**最终补丁是什么？**、**官方评分结果如何？**。',
+          `请输入：**解决 ${next.task.task_id.replace('__', '-')} 任务**。`,
         ].join('\n') : [
           `已载入 **${next.task.task_id}** 的真实运行上下文。`,
           '',
@@ -435,13 +436,19 @@ export function useSwarmRewardChat(
       addMessage('user', trimmed, mediaItems);
       useChatStore.getState().setProcessing(sessionId, true);
       useChatStore.getState().setThinking(sessionId, true);
-      addMessage('assistant', '正在按原始顺序回放这次 Code Normal baseline 的真实工具轨迹。最后会显示官方 grader 结果。');
+      addMessage('assistant', '正在创建新的 SWE 沙箱并启动 DSV4-Flash Code Normal。后续工具动作会按实际发生时间实时出现，任务结束后才运行官方 grader。');
       try {
-        await replayRun(await loadRewardRun(run?.operation === 'baseline' ? run.run_id : initialRunId));
+        const pinned = run?.operation === 'baseline' ? run : await loadRewardRun(initialRunId);
+        const next = await startCodeNormalBaseline(pinned.task.task_id);
+        const url = new URL(window.location.href);
+        url.searchParams.set('run', next.run_id);
+        window.history.replaceState(window.history.state, '', url);
+        setRun(next);
+        publishRun(next);
       } catch (reason) {
         useChatStore.getState().setProcessing(sessionId, false);
         useChatStore.getState().setThinking(sessionId, false);
-        addMessage('system', `Code Normal 轨迹载入失败：${reason instanceof Error ? reason.message : String(reason)}`);
+        addMessage('system', `Code Normal 启动失败：${reason instanceof Error ? reason.message : String(reason)}`);
       }
       return true;
     }
@@ -646,7 +653,7 @@ export function useSwarmRewardChat(
         useChatStore.getState().setThinking(sessionId, false);
       }
     }
-  }, [addMessage, beginBuild, beginFromPack, beginRun, enabled, ensureCatalog, presentation, publishRun, recentRuns, replayRun, run, selectedTask, sessionId, tasks]);
+  }, [addMessage, beginBuild, beginFromPack, beginRun, enabled, ensureCatalog, initialRunId, presentation, publishRun, recentRuns, replayRun, run, selectedTask, sessionId, tasks]);
 
   const cancelRun = useCallback(async () => {
     if (!run || isTerminal(run)) return;
