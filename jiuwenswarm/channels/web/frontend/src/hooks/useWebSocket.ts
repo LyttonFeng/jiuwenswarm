@@ -557,7 +557,12 @@ interface UseWebSocketReturn {
   ) => Promise<T>;
   persistMedia: (content: string, sessionId: string, mediaItems: MediaItem[]) => Promise<PersistMediaResponse>;
   persistDocuments: (content: string, sessionId: string, mediaItems: MediaItem[]) => Promise<PersistMediaResponse>;
-  sendMessage: (content: string, sessionId: string, mediaItems?: MediaItem[]) => Promise<boolean>;
+  sendMessage: (
+    content: string,
+    sessionId: string,
+    mediaItems?: MediaItem[],
+    agentContext?: string | null,
+  ) => Promise<boolean>;
   sendStructuredChatContent: (content: unknown, sessionId: string) => Promise<void>;
   interrupt: (
     sessionId: string,
@@ -1362,7 +1367,12 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
 
   // 发送聊天消息
   const sendMessage = useCallback(
-    async (content: string, sessionId: string, mediaItems: MediaItem[] = []): Promise<boolean> => {
+    async (
+      content: string,
+      sessionId: string,
+      mediaItems: MediaItem[] = [],
+      agentContext?: string | null,
+    ): Promise<boolean> => {
       const hasMedia = mediaItems.length > 0;
       // Attachment-only payloads are allowed when mediaItems are present.
       // 【上传文档】-only text without any mediaItems is still blocked.
@@ -1491,9 +1501,12 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
         const activeGoal = useGoalStore.getState().getRuntime(sessionId)?.goal;
         const inputMode = activeGoal?.status === 'active' ? 'steer' : undefined;
         const outgoingMode = resolveOutgoingMode(sessionId, currentMode);
+        const modelContent = agentContext
+          ? `${agentContext}\n\n<user_question>\n${outgoingContent}\n</user_question>`
+          : outgoingContent;
         await request('chat.send', {
           session_id: sessionId,
-          content: outgoingContent,
+          content: modelContent,
           ...(outgoingMediaItems ? { media_items: outgoingMediaItems } : {}),
           ...(outgoingFiles ? { files: outgoingFiles } : {}),
           mode: outgoingMode,

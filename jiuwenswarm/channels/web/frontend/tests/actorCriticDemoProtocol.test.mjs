@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  agentContextForRun,
   finalSummary,
   rewardPackContent,
 } from '../node_modules/.cache/actor-critic-demo/swarmRewardChatProtocol.mjs';
@@ -93,9 +94,19 @@ test('v6 RewardPack copy preserves the successful-witness authority boundary', (
   assert.doesNotMatch(content, /Answer-blind|Gold-assisted/);
 });
 
-test('leadership summary prefers the frozen Pack and saved trajectory', () => {
+test('demo summary prefers the frozen Pack and saved trajectory', () => {
   const summary = finalSummary(runFixture());
   assert.match(summary, /已保存轨迹：1 个 Actor-Critic turn/);
   assert.match(summary, /1\/1 resolved/);
   assert.match(summary, /未使用 hidden tests/);
+});
+
+test('agent Q&A context exposes verified run evidence without a witness body', () => {
+  const context = agentContextForRun(runFixture());
+  assert.match(context, /<swarm_reward_run_context>/);
+  assert.match(context, /Fix the issue/);
+  assert.match(context, /Official grader: 1 resolved/);
+  assert.match(context, /Final patch:\ndiff/);
+  assert.match(context, /successful witness may have been used/);
+  assert.doesNotMatch(context, /successful-witness\.patch|gold patch/i);
 });

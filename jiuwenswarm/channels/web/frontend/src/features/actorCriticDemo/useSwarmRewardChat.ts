@@ -17,6 +17,7 @@ import {
   STAGES,
   STAGE_LABELS,
   TOOL_NAMES,
+  agentContextForRun,
   answerForIntent,
   environmentStatus,
   finalSummary,
@@ -46,8 +47,18 @@ export type SwarmRewardChatController = {
   enabled: boolean;
   activeTaskId: string;
   send: (content: string, mediaItems?: MediaItem[]) => Promise<boolean>;
+  takeAgentContext: () => string | null;
   cancel: () => Promise<void>;
 };
+
+const AGENT_QA_INTENTS = new Set([
+  'task_context',
+  'rewardpack_content',
+  'patch',
+  'critic',
+  'grader',
+  'explain',
+]);
 
 function timestamp(): string {
   return new Date().toISOString();
@@ -76,6 +87,7 @@ export function useSwarmRewardChat(
   const [run, setRun] = useState<RewardRun | null>(null);
   const progressRef = useRef<Progress | null>(null);
   const replayedRunRef = useRef<string | null>(null);
+  const pendingAgentContextRef = useRef<string | null>(null);
   const catalogPromiseRef = useRef<Promise<{
     tasks: RewardTaskPreset[];
     recentRuns: RewardRun[];
@@ -277,12 +289,22 @@ export function useSwarmRewardChat(
     if (!enabled || !initialRunId || replayedRunRef.current === initialRunId) return;
     replayedRunRef.current = initialRunId;
     void loadRewardRun(initialRunId)
-      .then(replayRun)
+      .then((next) => {
+        setSelectedTask(next.task);
+        setRun(next);
+        addMessage('assistant', [
+          `已载入 **${next.task.task_id}** 的真实运行上下文。`,
+          '',
+          '你可以直接提问，JiuwenSwarm 会结合冻结 RewardPack、Actor–Critic 轨迹、最终补丁和官方 grader 证据实时回答。',
+          '',
+          '例如：**这个任务为什么难？**、**Critic 为什么介入？**、**最终改了什么？**。只有你明确要求“展示轨迹”时，才会展开完整历史回放。',
+        ].join('\n'));
+      })
       .catch((reason) => {
         replayedRunRef.current = null;
-        addMessage('system', `无法回放运行 ${initialRunId}：${reason instanceof Error ? reason.message : String(reason)}`);
+        addMessage('system', `无法载入运行 ${initialRunId}：${reason instanceof Error ? reason.message : String(reason)}`);
       });
-  }, [addMessage, enabled, initialRunId, replayRun]);
+  }, [addMessage, enabled, initialRunId]);
 
   useEffect(() => {
     if (!enabled || !run || isTerminal(run)) return;
@@ -350,6 +372,7 @@ export function useSwarmRewardChat(
   const send = useCallback(async (content: string, mediaItems?: MediaItem[]) => {
     const trimmed = content.trim();
     if (!enabled || !trimmed) return false;
+    pendingAgentContextRef.current = null;
     const submission = await resolveSwarmRewardSubmitRoute(() => routeRewardMessage(trimmed, {
       selected_task_id: run?.task.task_id || selectedTask?.task_id || null,
       active_run: run ? {
@@ -359,6 +382,16 @@ export function useSwarmRewardChat(
       } : null,
     }));
     if (submission.kind === 'general') return false;
+
+    if (
+      submission.kind === 'demo'
+      && run
+      && submission.route.intent
+      && AGENT_QA_INTENTS.has(submission.route.intent)
+    ) {
+      pendingAgentContextRef.current = agentContextForRun(run);
+      return false;
+    }
 
     let keepProcessing = Boolean(run && !isTerminal(run));
     addMessage('user', trimmed, mediaItems);
@@ -544,6 +577,11 @@ export function useSwarmRewardChat(
     enabled,
     activeTaskId: run?.task.task_id || selectedTask?.task_id || '',
     send,
+    takeAgentContext: () => {
+      const context = pendingAgentContextRef.current;
+      pendingAgentContextRef.current = null;
+      return context;
+    },
     cancel: cancelRun,
   };
 }

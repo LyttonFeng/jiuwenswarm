@@ -1787,9 +1787,11 @@ function AppContent() {
   const handleSendMessage = useCallback(async (content: string, mediaItems?: MediaItem[]) => {
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) return;
+    let agentContext: string | null = null;
     if (isSwarmRewardMode) {
       const handled = await swarmRewardChat.send(content, mediaItems);
       if (handled) return;
+      agentContext = swarmRewardChat.takeAgentContext();
     }
     if (currentSessionId === NEW_CONVERSATION_ID) {
       if (creatingSessionRef.current) return;
@@ -1877,7 +1879,7 @@ function AppContent() {
           queueOrAddGoalObjectiveMessage(newSid, content);
           setGoalObjective(newSid, content);
         } else {
-          const sent = await sendMessage(content, newSid, mediaItems);
+          const sent = await sendMessage(content, newSid, mediaItems, agentContext);
           if (!sent) {
             useChatStore.getState().setInputValue(newSid, content);
           }
@@ -1896,7 +1898,7 @@ function AppContent() {
       return;
     }
     disposeInFlightHistoryHandles(currentSessionId);
-    const sent = await sendMessage(content, currentSessionId, mediaItems);
+    const sent = await sendMessage(content, currentSessionId, mediaItems, agentContext);
     if (sent) {
       const sessionState = useSessionStore.getState();
       const session =

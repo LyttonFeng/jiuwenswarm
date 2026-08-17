@@ -5,7 +5,9 @@ The demo has two deliberately separate user surfaces:
 - `/chat/new?mode=swarm-reward` is the usable Coding Agent. It reuses JiuwenSwarm's
   `ChatPanel`, message timeline, tool cards, project picker, model selector, and
   composer. A thin controller translates the remote RewardPack pipeline into
-  ordinary JiuwenSwarm user, assistant, and tool events.
+  ordinary JiuwenSwarm user, assistant, and tool events. Explanatory follow-up
+  questions are answered by the real JiuwenSwarm Agent with a bounded read-only
+  projection of the selected run; the user's visible bubble remains unchanged.
 - `/swarm-reward` is the experiment dashboard. It inspects a run but does not
   pretend to be an Agent conversation.
 
@@ -53,6 +55,10 @@ official score, or open the corresponding dashboard run. Builder rounds, Actor t
 actions, Critic interventions, and grader results appear as normal JiuwenSwarm tool
 events. When construction uses a successful witness, that fact is recorded in the
 Pack boundary; the witness is never exposed to Actor or online Critic.
+
+Opening a URL with `run=<run-id>` loads that run as Q&A context without dumping the
+whole saved trajectory into chat. The user can ask a real follow-up immediately;
+the full turn history is expanded only after an explicit replay request.
 
 The separation keeps the research claim legible: conversation is the intervention
 surface, while the dashboard is evidence inspection.
