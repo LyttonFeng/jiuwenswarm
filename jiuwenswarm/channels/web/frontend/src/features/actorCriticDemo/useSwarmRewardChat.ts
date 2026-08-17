@@ -32,6 +32,7 @@ import { resolveSwarmRewardSubmitRoute } from './swarmRewardSubmitRouting';
 import type { PackMode, RewardRun, RewardTaskPreset, RewardTimelineEvent } from './types';
 
 const POLL_INTERVAL_MS = 1_500;
+const BASELINE_REPLAY_EVENT_DELAY_MS = 220;
 const WELCOME_MESSAGE_ID = 'swarm-reward-welcome';
 
 export type RewardRunPresentation = 'swarm_reward' | 'code_normal_baseline';
@@ -175,13 +176,16 @@ export function useSwarmRewardChat(
     if (!progress) return;
     const visibleStatus = displayEventStatus(event, next);
     const previousStatus = progress.publishedEvents.get(event.id);
+    const eventToolName = next.operation === 'baseline'
+      ? `jiuwenswarm.code_normal.${event.kind}`
+      : `swarm_reward.${event.kind}`;
     if (!previousStatus) {
       if (event.kind === 'critic_intervention') {
         addMessage('assistant', `**${event.title}**\n\n> ${event.detail}`);
       } else {
         useChatStore.getState().addToolCall(sessionId, {
           id: `${next.run_id}-${event.id}`,
-          name: `swarm_reward.${event.kind}`,
+          name: eventToolName,
           display_name: event.title,
           arguments: { stage: event.stage, evidence: event.detail },
         });
@@ -190,7 +194,7 @@ export function useSwarmRewardChat(
     if (event.kind !== 'critic_intervention' && visibleStatus !== 'running' && previousStatus !== visibleStatus) {
       const cancelled = visibleStatus === 'cancelled';
       useChatStore.getState().addToolResult(sessionId, {
-        toolName: `swarm_reward.${event.kind}`,
+        toolName: eventToolName,
         toolCallId: `${next.run_id}-${event.id}`,
         result: event.detail,
         success: visibleStatus === 'completed' || visibleStatus === 'revised',
@@ -229,7 +233,7 @@ export function useSwarmRewardChat(
     if (isTerminal(next)) publishTerminal(next);
   }, [addMessage, openStage, publishTerminal, publishTimelineEvent]);
 
-  const replayRun = useCallback((next: RewardRun) => {
+  const replayRun = useCallback(async (next: RewardRun) => {
     setSelectedTask(next.task);
     progressRef.current = {
       runId: next.run_id,
@@ -255,11 +259,19 @@ export function useSwarmRewardChat(
     for (const stage of replayStages) {
       openStage(stage, next);
       completeStage(stage, next);
+      if (presentation === 'code_normal_baseline') {
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+      }
     }
-    for (const event of next.timeline || []) publishTimelineEvent(event, next);
+    for (const event of next.timeline || []) {
+      publishTimelineEvent(event, next);
+      if (presentation === 'code_normal_baseline') {
+        await new Promise((resolve) => window.setTimeout(resolve, BASELINE_REPLAY_EVENT_DELAY_MS));
+      }
+    }
     publishTerminal(next);
     setRun(next);
-  }, [addMessage, completeStage, openStage, publishTerminal, publishTimelineEvent]);
+  }, [addMessage, completeStage, openStage, presentation, publishTerminal, publishTimelineEvent]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -448,8 +460,9 @@ export function useSwarmRewardChat(
         && (route.intent === 'start_run' || route.intent === 'build_rewardpack')
       ) {
         addMessage('assistant', run
-          ? finalSummary(run)
+          ? '正在按原始顺序回放这次 Code Normal baseline 的真实工具轨迹。最后会显示官方 grader 结果。'
           : '这个入口只展示已冻结的 Code Normal baseline，不会启动 RewardPack 或 Actor-Critic。');
+        if (run) await replayRun(await loadRewardRun(run.run_id));
         return true;
       }
       if (route.intent === 'environment_status') {
@@ -510,7 +523,7 @@ export function useSwarmRewardChat(
 
       if (route.intent === 'replay_run') {
         if (presentation === 'code_normal_baseline' && run?.operation === 'baseline') {
-          replayRun(await loadRewardRun(run.run_id));
+          await replayRun(await loadRewardRun(run.run_id));
           return true;
         }
         if (!task) {
@@ -522,7 +535,7 @@ export function useSwarmRewardChat(
           addMessage('assistant', `没有找到 **${task.task_id}** 的已完成运行。你可以直接让我开始解决它。`);
           return true;
         }
-        replayRun(await loadRewardRun(frozen.run_id));
+        await replayRun(await loadRewardRun(frozen.run_id));
         return true;
       }
 
