@@ -16,13 +16,13 @@ from jiuwenswarm.agents.harness.common.tools.command_tools import (
 def test_blocks_pkill_on_jiuwenswarm_backend() -> None:
     reason = _check_command_safety('pkill -f "jiuwenswarm" 2>/dev/null')
     assert reason is not None
-    assert "jiuwenswarm" in reason
+    assert "process termination" in reason
 
 
 def test_blocks_pkill_on_jiuwenswarm_tui() -> None:
     reason = _check_command_safety('pkill -f "jiuwenswarm-tui" 2>/dev/null')
     assert reason is not None
-    assert "jiuwenswarm" in reason
+    assert "process termination" in reason
 
 
 def test_blocks_pkill_on_jiuwenswarm_tui_in_compound_command() -> None:
@@ -50,6 +50,75 @@ def test_blocks_pgrep_xargs_kill_pipeline() -> None:
 def test_blocks_pkill_on_jiuwenclaw_backend() -> None:
     reason = _check_command_safety('pkill -f "jiuwenclaw" 2>/dev/null')
     assert reason is not None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "pkill -9 -f 'Google Chrome'",
+        "/usr/bin/pkill -f chromium",
+        "killall node",
+        "sudo killall Google\\ Chrome",
+        "kill -9 12345",
+        "command kill 12345",
+        "pgrep -f Chrome | xargs kill -9",
+        "find /tmp -name '*.pid' -exec kill 12345 ';'",
+        "sh -c 'pkill -f Chrome'",
+        "bash -lc 'killall chromium'",
+    ],
+)
+def test_blocks_host_process_termination_regardless_of_target(command: str) -> None:
+    reason = _check_command_safety(command)
+    assert reason is not None
+    assert "process termination" in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo 'do not kill the browser'",
+        "grep -n kill README.md",
+        "printf '%s\\n' pkill killall",
+        "python3 -m http.server 8080 --bind 127.0.0.1",
+        "ps -p 12345 -o pid,stat,command",
+    ],
+)
+def test_process_control_guard_is_command_position_aware(command: str) -> None:
+    assert _check_command_safety(command) is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "shutdown -h now",
+        "sudo reboot",
+        "diskpart /s wipe.txt",
+        "mkfs.ext4 /dev/example",
+        "rm -rf build-cache",
+        "rm --recursive --force build-cache",
+        "reg delete HKCU\\Software\\Example /f",
+        "Remove-Item cache -Recurse -Force",
+        "sh -c 'shutdown -h now'",
+    ],
+)
+def test_blocks_real_host_destructive_commands(command: str) -> None:
+    reason = _check_command_safety(command)
+    assert reason is not None
+    assert "host-destructive" in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo shutdown reboot diskpart mkfs",
+        "grep -n 'rm -rf' safety_notes.md",
+        "python3 -c 'print(\"server.shutdown()\")'",
+        "python3 - <<'PY'\nsrv.shutdown()\nprint('reboot')\nPY",
+        "cat <<'EOF'\nshutdown -h now\nrm -rf /tmp/not-executed\nEOF",
+    ],
+)
+def test_host_destructive_guard_ignores_data_and_heredoc_bodies(command: str) -> None:
+    assert _check_command_safety(command) is None
 
 
 # ── jiuwenswarm-tui spawn 护栏 ────────────────────────────────
@@ -219,4 +288,3 @@ def test_worktree_check_ignores_non_worktree_commands(_project_root) -> None:
     assert _check_worktree_path_safety("git worktree list") is None
     assert _check_worktree_path_safety("ls -la ../somewhere") is None
     assert _check_worktree_path_safety("git branch feature-x") is None
-

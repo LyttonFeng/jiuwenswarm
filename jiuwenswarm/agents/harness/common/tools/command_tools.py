@@ -18,6 +18,9 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from openjiuwen.core.foundation.tool import tool
+from openjiuwen.core.sys_operation.local.shell_safety import (
+    check_shell_command_safety,
+)
 from openjiuwen.core.sys_operation.shell_process_registry import (
     consume_shell_session_cancelled,
     register_shell_process,
@@ -130,49 +133,6 @@ def _enforce_tui_spawn_budget(command: str, session_id: str) -> str | None:
     return None
 
 
-_DANGEROUS_COMMAND_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\brm\s+-rf\b", re.IGNORECASE), "blocked pattern: rm -rf"),
-    (re.compile(r"\bdel\s+/[a-z]*[fsq][a-z]*\b", re.IGNORECASE), "blocked pattern: del /f /s /q"),
-    (re.compile(r"\brd\s+/s\s+/q\b", re.IGNORECASE), "blocked pattern: rd /s /q"),
-    (re.compile(r"\bformat\s+[a-z]:", re.IGNORECASE), "blocked pattern: format drive"),
-    (re.compile(r"\bshutdown\b", re.IGNORECASE), "blocked pattern: shutdown"),
-    (re.compile(r"\breboot\b", re.IGNORECASE), "blocked pattern: reboot"),
-    (re.compile(r"\bdiskpart\b", re.IGNORECASE), "blocked pattern: diskpart"),
-    (re.compile(r"\bmkfs\b", re.IGNORECASE), "blocked pattern: mkfs"),
-    (re.compile(r"\breg\s+delete\b", re.IGNORECASE), "blocked pattern: reg delete"),
-    (
-        re.compile(r"\bremove-item\b[^\n\r]*-recurse[^\n\r]*-force", re.IGNORECASE),
-        "blocked pattern: Remove-Item -Recurse -Force",
-    ),
-    (
-        re.compile(r"\bpkill\b[^\n\r;|&]*jiuwenswarm", re.IGNORECASE),
-        "blocked pattern: pkill targeting jiuwenswarm (includes user TUI)",
-    ),
-    (
-        re.compile(r"\bkillall\b[^\n\r;|&]*jiuwenswarm", re.IGNORECASE),
-        "blocked pattern: killall targeting jiuwenswarm (includes user TUI)",
-    ),
-    (
-        re.compile(r"\bpkill\b[^\n\r;|&]*jiuwenclaw", re.IGNORECASE),
-        "blocked pattern: pkill targeting jiuwenclaw backend",
-    ),
-    (
-        re.compile(r"\bkillall\b[^\n\r;|&]*jiuwenclaw", re.IGNORECASE),
-        "blocked pattern: killall targeting jiuwenclaw backend",
-    ),
-    (
-        re.compile(r"\bkill\b[^\n\r;|&]*jiuwenswarm", re.IGNORECASE),
-        "blocked pattern: kill targeting jiuwenswarm (includes user TUI)",
-    ),
-    (
-        re.compile(
-            r"jiuwenswarm[^\n\r;|&]{0,240}\|\s*xargs\s+kill\b",
-            re.IGNORECASE,
-        ),
-        "blocked pattern: xargs kill pipeline targeting jiuwenswarm",
-    ),
-]
-
 _POWERSHELL_TOKENS = (
     "powershell ",
     "powershell.exe ",
@@ -275,10 +235,7 @@ def _clip_text(value: str, max_chars: int) -> str:
 
 
 def _check_command_safety(command: str) -> str | None:
-    for pattern, message in _DANGEROUS_COMMAND_PATTERNS:
-        if pattern.search(command):
-            return message
-    return None
+    return check_shell_command_safety(command)
 
 
 # Options of `git worktree add` that consume the following token as a value.
