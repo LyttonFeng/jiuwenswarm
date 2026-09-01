@@ -82,6 +82,7 @@ def test_code_config_is_converted_to_spec_snapshot(tmp_path):
         "progressive_tool_enabled": True,
         "react": {
             "enable_task_loop": True,
+            "parallel_tool_calls": False,
             "max_iterations": 23,
             "subagents": {"code_agent": {"enabled": True}},
         },
@@ -132,6 +133,7 @@ def test_code_config_is_converted_to_spec_snapshot(tmp_path):
         "max_iterations": 23,
     }
     assert spec.enable_task_loop is True
+    assert spec.parallel_tool_calls is False
     assert spec.progressive_tool is not None
     assert spec.progressive_tool.enabled is True
     assert spec.max_iterations == 23
